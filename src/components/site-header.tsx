@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { Menu, Search, ShoppingBag, User } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { navLinks, siteConfig } from "@/lib/data"
 
@@ -59,28 +59,23 @@ export function SiteHeader() {
           <Button variant="ghost" size="icon" aria-label="Search">
             <Search />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
+          <Link
+            href="/account"
             aria-label="Account"
-            nativeButton={false}
-            render={<Link href="/account" />}
+            className={buttonVariants({ variant: "ghost", size: "icon" })}
           >
             <User />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
+          </Link>
+          <Link
+            href="/cart"
             aria-label="Cart, 2 items"
-            className="relative"
-            nativeButton={false}
-            render={<Link href="/cart" />}
+            className={buttonVariants({ variant: "ghost", size: "icon", className: "relative" })}
           >
             <ShoppingBag />
             <span className="absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
               2
             </span>
-          </Button>
+          </Link>
         </div>
       </div>
     </header>

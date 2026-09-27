@@ -13,8 +13,14 @@ const formatPrice = (value: number) =>
 
 function ProductCard({ product }: { product: Product }) {
   return (
-    <Card className="group gap-0 py-0">
-      <Link href={`/products/${product.slug}`} className="relative block aspect-square overflow-hidden bg-muted">
+    <Card className="group relative gap-0 py-0">
+      {/* Duplicate of the title link for pointer users; hidden from AT and tab order to avoid announcing it twice */}
+      <Link
+        href={`/products/${product.slug}`}
+        aria-hidden
+        tabIndex={-1}
+        className="relative block aspect-square overflow-hidden bg-muted"
+      >
         <Image
           src={product.image}
           alt={product.name}
@@ -22,8 +28,8 @@ function ProductCard({ product }: { product: Product }) {
           sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
           className="object-cover transition-transform duration-500 group-hover:scale-105"
         />
-        {product.badge && <Badge className="absolute top-3 left-3">{product.badge}</Badge>}
       </Link>
+      {product.badge && <Badge className="absolute top-3 left-3">{product.badge}</Badge>}
       <CardContent className="flex flex-1 flex-col gap-2 py-4">
         <p className="text-xs text-muted-foreground">{product.category}</p>
         <Link href={`/products/${product.slug}`} className="font-medium hover:underline">

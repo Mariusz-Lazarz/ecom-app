@@ -3,7 +3,7 @@ import { ArrowRight, Star } from "lucide-react"
 
 import { LottieAnimation } from "@/components/lottie-animation"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button"
 
 const stats = [
   { value: "50k+", label: "Happy customers" },
@@ -28,18 +28,15 @@ export function Hero() {
             return if it&apos;s not quite right.
           </p>
           <div className="flex flex-wrap gap-3">
-            <Button size="lg" className="h-11 px-5" nativeButton={false} render={<Link href="/products" />}>
+            <Link href="/products" className={buttonVariants({ size: "lg", className: "h-11 px-5" })}>
               Shop now <ArrowRight data-icon="inline-end" />
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              className="h-11 px-5"
-              nativeButton={false}
-              render={<Link href="/categories" />}
+            </Link>
+            <Link
+              href="/categories"
+              className={buttonVariants({ size: "lg", variant: "outline", className: "h-11 px-5" })}
             >
               Browse categories
-            </Button>
+            </Link>
           </div>
           <dl className="grid max-w-md grid-cols-3 gap-4 pt-4">
             {stats.map((stat) => (

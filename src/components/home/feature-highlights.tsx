@@ -2,7 +2,7 @@ import Link from "next/link"
 import { ArrowRight, Clock, CreditCard, Lock, PackageCheck, RotateCcw, ShieldCheck, Truck } from "lucide-react"
 
 import { LottieAnimation } from "@/components/lottie-animation"
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
 const highlights = [
@@ -65,9 +65,9 @@ export function FeatureHighlights() {
                   </li>
                 ))}
               </ul>
-              <Button variant="outline" nativeButton={false} render={<Link href={item.href} />}>
+              <Link href={item.href} className={buttonVariants({ variant: "outline" })}>
                 {item.linkLabel} <ArrowRight data-icon="inline-end" />
-              </Button>
+              </Link>
             </div>
           </div>
         ))}
