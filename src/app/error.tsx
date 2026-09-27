@@ -5,12 +5,13 @@ import Link from "next/link"
 
 import { ErrorState } from "@/components/errors/error-state"
 import { Button, buttonVariants } from "@/components/ui/button"
+import { logger } from "@/lib/logger"
 
 // Catches anything thrown while rendering a page below the root layout. Server errors arrive here
 // with a generic message and a digest that matches the server log entry.
 export default function Error({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
   useEffect(() => {
-    console.error(error)
+    logger.error("Page crashed", { scope: "browser", err: error, digest: error.digest })
   }, [error])
 
   return (

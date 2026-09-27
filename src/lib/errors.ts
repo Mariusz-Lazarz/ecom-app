@@ -1,3 +1,5 @@
+import { logger, type Logger } from "@/lib/logger"
+
 // Errors we expect and know how to explain to the client. Anything else is treated as a bug:
 // logged in full on the server and reported to the client only as a generic 500.
 export class AppError extends Error {
@@ -74,8 +76,11 @@ export function toErrorBody(err: unknown): { status: number; body: ErrorBody } {
   return { status: 500, body: { error: { code: "internal_error", message: GENERIC_MESSAGE } } }
 }
 
-export function logError(err: unknown, context: string) {
-  // 4xx are the client's problem, not ours, so they don't need a stack trace in the logs.
-  if (err instanceof AppError && err.status < 500) return
-  console.error(`[${context}]`, err)
+export function logError(err: unknown, scope: string, log: Logger = logger) {
+  // 4xx are the client's problem, not ours: worth seeing, but without a stack trace.
+  if (err instanceof AppError && err.status < 500) {
+    log.warn(err.message, { scope, status: err.status, code: err.code })
+    return
+  }
+  log.error(err instanceof Error ? err.message : "Unexpected error", { scope, err })
 }

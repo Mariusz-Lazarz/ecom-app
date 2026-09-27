@@ -40,14 +40,17 @@ describe("toErrorBody", () => {
 })
 
 describe("logError", () => {
-  it("skips client errors and logs server errors", () => {
-    const spy = vi.spyOn(console, "error").mockImplementation(() => {})
+  it("warns about client errors and logs server errors in full", () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {})
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
     logError(new NotFoundError(), "test")
-    expect(spy).not.toHaveBeenCalled()
+    expect(error).not.toHaveBeenCalled()
+    expect(warn).toHaveBeenCalledTimes(1)
 
     logError(new ServiceUnavailableError(), "test")
     logError(new Error("boom"), "test")
-    expect(spy).toHaveBeenCalledTimes(2)
-    spy.mockRestore()
+    expect(error).toHaveBeenCalledTimes(2)
+    expect(String(error.mock.calls[1][0])).toContain("boom")
+    vi.restoreAllMocks()
   })
 })

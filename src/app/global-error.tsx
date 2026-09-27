@@ -2,11 +2,18 @@
 
 import "./globals.css"
 
+import { useEffect } from "react"
+
 import { ErrorState } from "@/components/errors/error-state"
 import { Button } from "@/components/ui/button"
+import { logger } from "@/lib/logger"
 
 // Last resort for errors in the root layout itself. It replaces the whole document.
 export default function GlobalError({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
+  useEffect(() => {
+    logger.error("Root layout crashed", { scope: "browser", err: error, digest: error.digest })
+  }, [error])
+
   return (
     <html lang="en" className="h-full antialiased">
       <body className="min-h-full flex flex-col">

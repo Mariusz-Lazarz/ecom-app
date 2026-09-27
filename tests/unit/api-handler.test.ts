@@ -46,7 +46,9 @@ describe("withErrorHandler", () => {
     const res = await handler(request(), {})
     expect(res.status).toBe(500)
     expect(JSON.stringify(await res.json())).not.toContain("secrets")
-    expect(spy).toHaveBeenCalledWith("[POST /api/things]", expect.any(Error))
+    const logged = spy.mock.calls.map((args) => String(args[0])).join("\n")
+    expect(logged).toContain("connection string with secrets")
+    expect(logged).toContain("POST /api/things 500")
     spy.mockRestore()
   })
 
