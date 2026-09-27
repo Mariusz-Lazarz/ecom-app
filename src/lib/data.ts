@@ -1,5 +1,3 @@
-import { Backpack, Camera, Footprints, Glasses, Headphones, Watch } from "lucide-react"
-
 export const siteConfig = {
   name: "Northcart",
   tagline: "Everyday goods, thoughtfully picked.",
@@ -13,13 +11,12 @@ export const navLinks = [
   { href: "/about", label: "About" },
 ]
 
+// Only the footer links still use this; the homepage reads categories from the database.
 export const categories = [
-  { slug: "audio", name: "Audio", count: 48, icon: Headphones },
-  { slug: "watches", name: "Watches", count: 32, icon: Watch },
-  { slug: "footwear", name: "Footwear", count: 64, icon: Footprints },
-  { slug: "cameras", name: "Cameras", count: 21, icon: Camera },
-  { slug: "accessories", name: "Accessories", count: 87, icon: Glasses },
-  { slug: "bags", name: "Bags", count: 40, icon: Backpack },
+  { slug: "audio", name: "Audio" },
+  { slug: "watches", name: "Watches" },
+  { slug: "footwear", name: "Footwear" },
+  { slug: "cameras", name: "Cameras" },
 ]
 
 export type Product = {

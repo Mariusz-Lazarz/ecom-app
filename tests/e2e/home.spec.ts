@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
 
-import { categories, featuredProducts, navLinks, siteConfig } from "../../src/lib/data"
+import { featuredProducts, navLinks, siteConfig } from "../../src/lib/data"
 
 const animations = ["hero-shopping", "secure-payment", "delivery", "gift"]
 
@@ -137,7 +137,12 @@ test.describe("home page", () => {
     }
   })
 
-  test("links every category tile and product card to its page", async ({ page }) => {
+  test("links every category tile and product card to its page", async ({ page, request }) => {
+    const { categories } = (await (await request.get("/api/categories")).json()) as {
+      categories: { slug: string; name: string }[]
+    }
+    expect(categories.length).toBeGreaterThan(0)
+
     await page.goto("/")
 
     for (const category of categories) {

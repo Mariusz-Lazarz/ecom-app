@@ -3,6 +3,10 @@ import { describe, expect, it, vi } from "vitest"
 
 // SiteHeader is an async Server Component (reads the session) and has its own tests.
 vi.mock("@/components/site-header", () => ({ SiteHeader: () => <header /> }))
+// CategoriesSection is an async Server Component (reads the database) and has its own tests.
+vi.mock("@/components/home/categories-section", () => ({
+  CategoriesSection: () => <section><h2>Shop by category</h2></section>,
+}))
 
 const { default: Home } = await import("@/app/page")
 
