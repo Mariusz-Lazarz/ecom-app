@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="400" viewBox="0 0 880 400" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#57606a"/>
+    </marker>
+  </defs>
+
+  <rect width="880" height="400" rx="12" fill="#ffffff"/>
+  <text x="24" y="36" font-size="18" font-weight="600" fill="#1f2328">/pr skill: how the PR description is chosen</text>
+  <text x="24" y="58" font-size="13" fill="#57606a">The mode is picked automatically from the diff against dev</text>
+
+  <g font-size="13">
+    <!-- Start -->
+    <rect x="24" y="160" width="140" height="64" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
+    <text x="94" y="188" text-anchor="middle" font-weight="600" fill="#1f2328">Current branch</text>
+    <text x="94" y="207" text-anchor="middle" fill="#57606a">not dev / main</text>
+
+    <!-- Diff -->
+    <rect x="204" y="160" width="150" height="64" rx="8" fill="#ddf4ff" stroke="#54aeff"/>
+    <text x="279" y="188" text-anchor="middle" font-weight="600" fill="#1f2328">git diff dev...HEAD</text>
+    <text x="279" y="207" text-anchor="middle" fill="#57606a">classify the change</text>
+
+    <!-- Decision -->
+    <polygon points="474,132 564,192 474,252 384,192" fill="#fbefff" stroke="#c297ff"/>
+    <text x="474" y="188" text-anchor="middle" font-weight="600" fill="#1f2328">Runtime code</text>
+    <text x="474" y="206" text-anchor="middle" font-weight="600" fill="#1f2328">touched?</text>
+
+    <!-- Light -->
+    <rect x="620" y="84" width="236" height="96" rx="8" fill="#dafbe1" stroke="#4ac26b"/>
+    <text x="738" y="110" text-anchor="middle" font-weight="600" fill="#1f2328">Light mode</text>
+    <text x="738" y="132" text-anchor="middle" fill="#57606a">Summary · What changed</text>
+    <text x="738" y="150" text-anchor="middle" fill="#57606a">Verification (one line)</text>
+    <text x="738" y="168" text-anchor="middle" fill="#57606a">docs, skills, CI, typos</text>
+
+    <!-- Full -->
+    <rect x="620" y="210" width="236" height="120" rx="8" fill="#fff8c5" stroke="#d4a72c"/>
+    <text x="738" y="236" text-anchor="middle" font-weight="600" fill="#1f2328">Full mode</text>
+    <text x="738" y="258" text-anchor="middle" fill="#57606a">Summary · What changed</text>
+    <text x="738" y="276" text-anchor="middle" fill="#57606a">Diagram (SVG, optional)</text>
+    <text x="738" y="294" text-anchor="middle" fill="#57606a">Important files · How to test</text>
+    <text x="738" y="312" text-anchor="middle" fill="#57606a">Proof · Not verified</text>
+  </g>
+
+  <g stroke="#57606a" stroke-width="1.5" fill="none" marker-end="url(#arrow)">
+    <line x1="164" y1="192" x2="202" y2="192"/>
+    <line x1="354" y1="192" x2="382" y2="192"/>
+    <path d="M530 155 L560 132 H618"/>
+    <path d="M530 229 L560 262 H618"/>
+  </g>
+  <g font-size="12" fill="#57606a">
+    <text x="566" y="124">no</text>
+    <text x="566" y="282">yes / unsure</text>
+  </g>
+
+  <text x="24" y="372" font-size="12" fill="#57606a">PRs always target dev. On dev or main the skill stops and asks for a feature branch.</text>
+</svg>
