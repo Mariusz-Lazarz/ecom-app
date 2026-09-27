@@ -9,23 +9,28 @@ A PR is the final, reviewer-facing summary of a piece of work. Commits are worki
 
 ## 1. Commit and push
 
-- The user creates the feature branch by hand before running this skill. Use the current branch as is; don't create, switch or rename branches. If the current branch is the repo's default branch, stop before committing anything and ask the user to create the branch.
+- The user creates the feature branch by hand before running this skill. Use the current branch as is; don't create, switch or rename branches. If the current branch is `dev` or the repo's default branch, stop before committing anything and ask the user to create the branch.
 - If there are uncommitted changes, commit them as one commit with a clear message. Stage files by name. Never commit secrets (`.env*`, keys) or build output.
 - Never rewrite existing commits (no squash, rebase, amend or force-push).
 - `git push -u origin HEAD`
 
 ## 2. Understand the change
 
-Base is the default branch: `gh repo view --json defaultBranchRef -q .defaultBranchRef.name`.
+Base is `dev` (PRs never target `main`). Only if `origin/dev` doesn't exist, fall back to the default branch: `gh repo view --json defaultBranchRef -q .defaultBranchRef.name`.
 
 - `git log --oneline <base>..HEAD` shows the steps taken.
 - `git diff <base>...HEAD --stat` then the full diff show what actually changed.
 
-Describe the **net result** of the diff, not the commit history. Classify what the change touches (frontend, backend/API, config, tests, docs). That decides which proof to collect.
+Describe the **net result** of the diff, not the commit history. Classify what the change touches (frontend, backend/API, config, tests, docs). That decides which proof to collect and which mode to use:
+
+- **Light mode**: the diff touches no runtime code, e.g. only docs (`*.md`, `CLAUDE.md`, `AGENTS.md`), comments, skills/agent config, CI or editor config. Also a tiny, self-evident code change (a typo, a one-line copy fix). Use the light template in step 4 and skip step 3 except for anything that actually applies (e.g. `npm run lint` after a config change).
+- **Full mode**: everything else, meaning any change to app behavior, `src/`, `db/`, dependencies or build config.
+
+Pick the mode yourself; don't ask. When in doubt, use full mode.
 
 ## 3. Collect proof
 
-Everything in Proof must come from something you actually ran in this session. Never invent output. What couldn't be checked goes in **Not verified**.
+Everything in Proof must come from something you actually ran in this session. Never invent output. What couldn't be checked goes in **Not verified**. Don't run checks that can't say anything about this change just to fill the section.
 
 **Tests.** Run the test scripts that exist in `package.json` and are relevant (`npm test`; `npm run test:e2e` when UI or routing changed; `npm run lint`). Report only counts. Paste output only for failures: the first failure, ≤15 lines. If anything fails, still open the PR, but as a draft (`--draft`), and say so in Summary.
 
@@ -50,11 +55,35 @@ Everything in Proof must come from something you actually ran in this session. N
    ```
    It pushes the files to the orphan `pr-assets` branch (never merged, keeps code history clean) and prints one URL per file, in order. Use these URLs exactly.
 
+**Diagram** (optional). Add one when a picture explains the change faster than text: a new flow between components, a data model, a request lifecycle. Never add one just to decorate the PR.
+- Always an **SVG** file, never Mermaid or ASCII. If the work already produced one (in the diff or your scratchpad), reuse it. Otherwise hand-write it in your scratchpad.
+- Keep it small (roughly ≤12 nodes) and draw only what this PR adds or changes, using real names (files, functions, routes). Give it a solid white background `<rect>` so it reads in GitHub's dark theme, use web-safe fonts, and put no scripts or external references in it.
+- Render it to PNG with the Playwright snippet above (`page.goto("file://<path>.svg")`) and look at it before using it. Overlapping text or clipped boxes aren't acceptable.
+- Upload the `.svg` with `upload-screenshots.sh` and embed the printed URL as an image. `raw.githubusercontent.com` serves it as `image/svg+xml`, so it renders in the PR body.
+
 **API** (when endpoints were added or changed). Hit the real server with `curl`. One row per scenario that exercises the change: the happy path plus the meaningful failures (400/401/404, validation, security checks like ignored client-supplied prices). Don't log every call made during development. Never include server logs, headers, cookies, tokens or secrets.
 
 ## 4. Write the description
 
-Write the body in **English** to a file in your scratchpad, following this template. Omit a section only when it truly doesn't apply (e.g. no API section for a UI-only change). Screenshots and API are the only optional parts of Proof.
+Write the body in **English** to a file in your scratchpad.
+
+**Light mode** uses this short template instead of the full one:
+
+````markdown
+## Summary
+
+1–3 sentences: what changed and why.
+
+## What changed
+
+- Short bullets, one per meaningful change.
+
+## Verification
+
+One line, e.g. "Docs only, no runtime impact." or "✅ Lint passed."
+````
+
+**Full mode** uses the template below. Omit a section only when it truly doesn't apply (e.g. no API section for a UI-only change). Diagram, Screenshots and API are optional.
 
 ````markdown
 ## Summary
@@ -64,6 +93,11 @@ A short paragraph: what this PR does and **why**, in plain language. Mention the
 ## What changed
 
 Explain the change clearly and completely, as behavior, not as a file list. Group under **Backend** / **Frontend** / etc. when more than one area changed. Include the reasoning behind non-obvious decisions and any known limitations. No length limit, but every line must help a reviewer understand the change.
+
+## Diagram
+
+Optional. One line saying what it shows, then the uploaded SVG:
+![Request flow for the cart API](url)
 
 ## Important files
 
