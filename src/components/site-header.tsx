@@ -60,7 +60,7 @@ export function SiteHeader() {
             <Search />
           </Button>
           <Link
-            href="/register"
+            href="/login"
             aria-label="Account"
             className={buttonVariants({ variant: "ghost", size: "icon" })}
           >

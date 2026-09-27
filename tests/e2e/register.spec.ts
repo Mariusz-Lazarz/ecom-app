@@ -32,10 +32,12 @@ async function fillForm(page: import("@playwright/test").Page, email: string) {
   await page.getByRole("button", { name: "Create account" }).click()
 }
 
-test("header account icon leads to the registration page", async ({ page }) => {
-  await page.goto("/")
-  await page.getByRole("link", { name: "Account" }).click()
+test("sign-in page links to registration and back", async ({ page }) => {
+  await page.goto("/login")
+  await page.getByRole("link", { name: "Create an account" }).click()
   await expect(page.getByText("Create your account")).toBeVisible()
+  await page.getByRole("link", { name: "Sign in" }).click()
+  await expect(page.getByText("Welcome back")).toBeVisible()
 })
 
 test("registers a new user and rejects the same email twice", async ({ page }) => {

@@ -12,10 +12,11 @@ const CredentialsSchema = z.object({
   password: z.string().min(1),
 })
 
-// Registration lives in a Server Action (src/app/actions/register.ts); Auth.js owns sessions.
-// There's no login screen yet, but the Credentials provider is ready for one.
+// Registration and login live in Server Actions (src/app/actions/); Auth.js owns sessions.
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
+  // Auth.js only trusts the Host header in dev by default; `next start` (used by e2e) needs this too.
+  trustHost: true,
   // Send Auth.js' own diagnostics through our logger instead of its default console output.
   logger: {
     error: (err) => log.error(err.message, { err }),
