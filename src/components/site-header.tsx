@@ -1,11 +1,14 @@
 import Link from "next/link"
 import { Menu, Search, ShoppingBag, User } from "lucide-react"
 
+import { auth } from "@/auth"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { navLinks, siteConfig } from "@/lib/data"
 
-export function SiteHeader() {
+export async function SiteHeader() {
+  const session = await auth()
+
   return (
     <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur supports-backdrop-filter:bg-background/60">
       <div className="bg-primary px-4 py-2 text-center text-xs font-medium text-primary-foreground">
@@ -60,7 +63,7 @@ export function SiteHeader() {
             <Search />
           </Button>
           <Link
-            href="/login"
+            href={session ? "/account" : "/login"}
             aria-label="Account"
             className={buttonVariants({ variant: "ghost", size: "icon" })}
           >
