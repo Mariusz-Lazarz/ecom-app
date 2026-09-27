@@ -3,6 +3,7 @@ import "server-only"
 import bcrypt from "bcryptjs"
 
 import { query } from "@/lib/db"
+import { ConflictError } from "@/lib/errors"
 
 const BCRYPT_ROUNDS = 12
 const UNIQUE_VIOLATION = "23505"
@@ -16,7 +17,7 @@ export type User = {
   created_at: Date
 }
 
-export class EmailTakenError extends Error {
+export class EmailTakenError extends ConflictError {
   constructor() {
     super("Email is already registered")
   }

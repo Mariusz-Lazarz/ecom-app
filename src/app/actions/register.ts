@@ -2,6 +2,7 @@
 
 import * as z from "zod"
 
+import { GENERIC_MESSAGE, logError } from "@/lib/errors"
 import { createUser, EmailTakenError } from "@/lib/users"
 import { RegisterSchema, type RegisterFormState } from "@/lib/validation/register"
 
@@ -27,8 +28,8 @@ export async function register(_state: RegisterFormState, formData: FormData): P
     if (err instanceof EmailTakenError) {
       return { errors: { email: ["An account with this email already exists."] }, values }
     }
-    console.error("Registration failed", err)
-    return { message: "Something went wrong. Please try again.", values }
+    logError(err, "register")
+    return { message: GENERIC_MESSAGE, values }
   }
 
   return { success: true, firstName: parsed.data.firstName }
