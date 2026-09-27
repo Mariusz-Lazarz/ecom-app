@@ -1,7 +1,10 @@
 import { render, screen } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
-import Home from "@/app/page"
+// SiteHeader is an async Server Component (reads the session) and has its own tests.
+vi.mock("@/components/site-header", () => ({ SiteHeader: () => <header /> }))
+
+const { default: Home } = await import("@/app/page")
 
 describe("Home page", () => {
   it("is structured as banner → main → contentinfo", () => {

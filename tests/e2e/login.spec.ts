@@ -62,6 +62,23 @@ test("signs in with the right password and lands on the home page", async ({ pag
   // Signed-in users are bounced away from the sign-in page.
   await page.goto("/login")
   await expect(page).toHaveURL("/")
+
+  // ...and the header account icon now leads to their account page.
+  await page.getByRole("link", { name: "Account" }).click()
+  await expect(page).toHaveURL("/account")
+  await expect(page.getByRole("heading", { name: "Hey Jan, welcome back!" })).toBeVisible()
+
+  // Logging out ends the session and lands back on the home page.
+  await page.getByRole("button", { name: "Log out" }).click()
+  await expect(page).toHaveURL("/")
+  expect(await sessionUser(page)).toBeNull()
+  await page.getByRole("link", { name: "Account" }).click()
+  await expect(page).toHaveURL("/login")
+})
+
+test("account page sends signed-out visitors to sign in", async ({ page }) => {
+  await page.goto("/account")
+  await expect(page).toHaveURL("/login")
 })
 
 test("rejects a wrong password and keeps the user signed out", async ({ page }) => {
