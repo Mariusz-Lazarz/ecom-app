@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="360" viewBox="0 0 880 360" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#57606a"/>
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#cf222e"/>
+    </marker>
+  </defs>
+
+  <rect width="880" height="360" rx="12" fill="#ffffff"/>
+  <text x="24" y="36" font-size="18" font-weight="600" fill="#1f2328">Northcart: API request flow</text>
+  <text x="24" y="58" font-size="13" fill="#57606a">GET /api/categories, from the browser to Postgres and back</text>
+
+  <!-- Nodes -->
+  <g font-size="13">
+    <rect x="24" y="100" width="120" height="64" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
+    <text x="84" y="128" text-anchor="middle" font-weight="600" fill="#1f2328">Browser</text>
+    <text x="84" y="147" text-anchor="middle" fill="#57606a">fetch()</text>
+
+    <rect x="184" y="100" width="140" height="64" rx="8" fill="#ddf4ff" stroke="#54aeff"/>
+    <text x="254" y="128" text-anchor="middle" font-weight="600" fill="#1f2328">proxy.ts</text>
+    <text x="254" y="147" text-anchor="middle" fill="#57606a">sets x-request-id</text>
+
+    <rect x="364" y="100" width="160" height="64" rx="8" fill="#fbefff" stroke="#c297ff"/>
+    <text x="444" y="128" text-anchor="middle" font-weight="600" fill="#1f2328">withErrorHandler</text>
+    <text x="444" y="147" text-anchor="middle" fill="#57606a">route.ts handler</text>
+
+    <rect x="564" y="100" width="140" height="64" rx="8" fill="#dafbe1" stroke="#4ac26b"/>
+    <text x="634" y="128" text-anchor="middle" font-weight="600" fill="#1f2328">lib/categories</text>
+    <text x="634" y="147" text-anchor="middle" fill="#57606a">SQL, server-only</text>
+
+    <rect x="744" y="100" width="112" height="64" rx="8" fill="#fff8c5" stroke="#d4a72c"/>
+    <text x="800" y="128" text-anchor="middle" font-weight="600" fill="#1f2328">Postgres</text>
+    <text x="800" y="147" text-anchor="middle" fill="#57606a">via lib/db query()</text>
+
+    <rect x="364" y="236" width="160" height="64" rx="8" fill="#ffebe9" stroke="#ff8182"/>
+    <text x="444" y="264" text-anchor="middle" font-weight="600" fill="#1f2328">toErrorBody()</text>
+    <text x="444" y="283" text-anchor="middle" fill="#57606a">+ logError()</text>
+  </g>
+
+  <!-- Happy path -->
+  <g stroke="#57606a" stroke-width="1.5" fill="none" marker-end="url(#arrow)">
+    <line x1="144" y1="132" x2="182" y2="132"/>
+    <line x1="324" y1="132" x2="362" y2="132"/>
+    <line x1="524" y1="132" x2="562" y2="132"/>
+    <line x1="704" y1="132" x2="742" y2="132"/>
+  </g>
+
+  <!-- Error path -->
+  <g stroke="#cf222e" stroke-width="1.5" fill="none" stroke-dasharray="5 4">
+    <line x1="444" y1="164" x2="444" y2="234" marker-end="url(#arrow-red)"/>
+    <path d="M364 268 H84 V166" marker-end="url(#arrow-red)"/>
+  </g>
+  <g font-size="12" fill="#cf222e">
+    <text x="452" y="204">throw AppError / ZodError</text>
+    <text x="96" y="260">{ error: { code, message, details? } }</text>
+  </g>
+
+  <!-- Legend -->
+  <g font-size="12" fill="#57606a">
+    <line x1="580" y1="260" x2="612" y2="260" stroke="#57606a" stroke-width="1.5"/>
+    <text x="620" y="264">happy path: 200 JSON</text>
+    <line x1="580" y1="284" x2="612" y2="284" stroke="#cf222e" stroke-width="1.5" stroke-dasharray="5 4"/>
+    <text x="620" y="288">error path: 4xx / 5xx JSON</text>
+    <text x="580" y="316">Next redirect/notFound are rethrown</text>
+  </g>
+</svg>
