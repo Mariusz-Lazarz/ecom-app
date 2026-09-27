@@ -56,10 +56,11 @@ Everything in Proof must come from something you actually ran in this session. N
    It pushes the files to the orphan `pr-assets` branch (never merged, keeps code history clean) and prints one URL per file, in order. Use these URLs exactly.
 
 **Diagram** (optional). Add one when a picture explains the change faster than text: a new flow between components, a data model, a request lifecycle. Never add one just to decorate the PR.
-- Always an **SVG** file, never Mermaid or ASCII. If the work already produced one (in the diff or your scratchpad), reuse it. Otherwise hand-write it in your scratchpad.
+- Always an **SVG** file, never Mermaid or ASCII. If the work already produced one, reuse it. Otherwise hand-write it.
 - Keep it small (roughly ≤12 nodes) and draw only what this PR adds or changes, using real names (files, functions, routes). Give it a solid white background `<rect>` so it reads in GitHub's dark theme, use web-safe fonts, and put no scripts or external references in it.
 - Render it to PNG with the Playwright snippet above (`page.goto("file://<path>.svg")`) and look at it before using it. Overlapping text or clipped boxes aren't acceptable.
-- Upload the `.svg` with `upload-screenshots.sh` and embed the printed URL as an image. `raw.githubusercontent.com` serves it as `image/svg+xml`, so it renders in the PR body.
+- A diagram is documentation, not a screenshot, so it lives in the repo: save it as `docs/diagrams/<descriptive-name>.svg` and commit it with the PR. If the change alters a flow that already has a diagram there, update that file instead of adding a new one. Never put diagrams on `pr-assets`.
+- After pushing, embed it pinned to the commit so it renders even after the branch is deleted: `https://raw.githubusercontent.com/<owner>/<repo>/<commit-sha>/docs/diagrams/<name>.svg`. `raw.githubusercontent.com` serves it as `image/svg+xml`, so it renders in the PR body.
 
 **API** (when endpoints were added or changed). Hit the real server with `curl`. One row per scenario that exercises the change: the happy path plus the meaningful failures (400/401/404, validation, security checks like ignored client-supplied prices). Don't log every call made during development. Never include server logs, headers, cookies, tokens or secrets.
 
