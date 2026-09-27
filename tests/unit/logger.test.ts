@@ -7,7 +7,7 @@ afterEach(() => {
 })
 
 function lastLine(spy: ReturnType<typeof vi.spyOn>) {
-  return spy.mock.calls.at(-1)!.map((arg) => (typeof arg === "string" ? arg : JSON.stringify(arg))).join(" ")
+  return spy.mock.calls.at(-1)!.map((arg: unknown) => (typeof arg === "string" ? arg : JSON.stringify(arg))).join(" ")
 }
 
 describe("logger", () => {
