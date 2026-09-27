@@ -3,8 +3,11 @@
 import * as z from "zod"
 
 import { GENERIC_MESSAGE, logError } from "@/lib/errors"
+import { logger } from "@/lib/logger"
 import { createUser, EmailTakenError } from "@/lib/users"
 import { RegisterSchema, type RegisterFormState } from "@/lib/validation/register"
+
+const log = logger.child({ scope: "register" })
 
 export async function register(_state: RegisterFormState, formData: FormData): Promise<RegisterFormState> {
   const raw = {
@@ -19,13 +22,17 @@ export async function register(_state: RegisterFormState, formData: FormData): P
 
   const parsed = RegisterSchema.safeParse(raw)
   if (!parsed.success) {
-    return { errors: z.flattenError(parsed.error).fieldErrors, values }
+    const fieldErrors = z.flattenError(parsed.error).fieldErrors
+    log.info("Registration rejected: invalid form", { fields: Object.keys(fieldErrors) })
+    return { errors: fieldErrors, values }
   }
 
   try {
-    await createUser(parsed.data)
+    const user = await createUser(parsed.data)
+    log.info("User registered", { userId: user?.id })
   } catch (err) {
     if (err instanceof EmailTakenError) {
+      log.info("Registration rejected: email taken", { email: parsed.data.email })
       return { errors: { email: ["An account with this email already exists."] }, values }
     }
     logError(err, "register")
