@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { featuredProducts, type Product } from "@/lib/data"
+import { cn } from "@/lib/utils"
 
 const formatPrice = (value: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value)
@@ -42,7 +43,9 @@ function ProductCard({ product }: { product: Product }) {
         </div>
         <div className="mt-auto flex items-center justify-between pt-2">
           <div className="flex items-baseline gap-2">
-            <span className="text-lg font-semibold">{formatPrice(product.price)}</span>
+            <span className={cn("text-lg font-semibold", product.compareAt && "text-destructive")}>
+              {formatPrice(product.price)}
+            </span>
             {product.compareAt && (
               <span className="text-sm text-muted-foreground line-through">
                 {formatPrice(product.compareAt)}

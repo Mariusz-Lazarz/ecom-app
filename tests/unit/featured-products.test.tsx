@@ -86,6 +86,19 @@ describe("FeaturedProducts", () => {
     }
   })
 
+  it("highlights the price in red only for discounted products", () => {
+    render(<FeaturedProducts />)
+
+    for (const product of featuredProducts) {
+      const price = within(getCard(product)).getByText(`$${product.price}.00`)
+      if (product.compareAt) {
+        expect(price).toHaveClass("text-destructive")
+      } else {
+        expect(price).not.toHaveClass("text-destructive")
+      }
+    }
+  })
+
   it("shows a badge only on products that define one", () => {
     render(<FeaturedProducts />)
 
