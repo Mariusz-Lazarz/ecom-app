@@ -1,9 +1,27 @@
 import { expect, test } from "@playwright/test"
+import pg from "pg"
 
-// Runs against the real local Postgres, so every run registers a fresh address.
+// Runs against the real local Postgres, so every run registers a fresh address and removes
+// the accounts it made afterwards. Workers run in parallel, so each one only cleans up its own.
+const createdEmails: string[] = []
+
 function uniqueEmail() {
-  return `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`
+  const email = `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`
+  createdEmails.push(email)
+  return email
 }
+
+test.afterAll(async () => {
+  if (createdEmails.length === 0) return
+  if (!process.env.DATABASE_URL) process.loadEnvFile(".env.local")
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL })
+  await client.connect()
+  try {
+    await client.query("DELETE FROM users WHERE email = ANY($1)", [createdEmails])
+  } finally {
+    await client.end()
+  }
+})
 
 async function fillForm(page: import("@playwright/test").Page, email: string) {
   await page.getByLabel("First name").fill("Jan")
