@@ -5,47 +5,9 @@ import Link from "next/link"
 import { CheckCircle2 } from "lucide-react"
 
 import { register } from "@/app/actions/register"
+import { Field } from "@/components/auth/field"
 import { Button, buttonVariants } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import type { RegisterFormState } from "@/lib/validation/register"
-
-type FieldProps = {
-  name: string
-  label: string
-  type?: string
-  autoComplete?: string
-  defaultValue?: string
-  errors?: string[]
-}
-
-function Field({ name, label, type = "text", autoComplete, defaultValue, errors }: FieldProps) {
-  const errorId = `${name}-error`
-  return (
-    <div className="space-y-1.5">
-      <label htmlFor={name} className="text-sm font-medium">
-        {label}
-      </label>
-      <Input
-        id={name}
-        name={name}
-        type={type}
-        autoComplete={autoComplete}
-        defaultValue={defaultValue}
-        required
-        aria-invalid={errors ? true : undefined}
-        aria-describedby={errors ? errorId : undefined}
-        className="h-10"
-      />
-      {errors && (
-        <ul id={errorId} className="space-y-0.5 text-xs text-destructive">
-          {errors.map((error) => (
-            <li key={error}>{error}</li>
-          ))}
-        </ul>
-      )}
-    </div>
-  )
-}
 
 export function RegisterForm() {
   const [state, action, pending] = useActionState<RegisterFormState, FormData>(register, undefined)
@@ -113,6 +75,12 @@ export function RegisterForm() {
       <Button type="submit" disabled={pending} className="h-10 w-full">
         {pending ? "Creating account…" : "Create account"}
       </Button>
+      <p className="text-center text-sm text-muted-foreground">
+        Already have an account?{" "}
+        <Link href="/login" className="font-medium text-foreground underline-offset-4 hover:underline">
+          Sign in
+        </Link>
+      </p>
     </form>
   )
 }

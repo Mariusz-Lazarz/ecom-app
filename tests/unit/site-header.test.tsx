@@ -33,7 +33,7 @@ describe("SiteHeader", () => {
   it("links account and cart icons to their pages with accessible names", () => {
     render(<SiteHeader />)
 
-    expect(screen.getByRole("link", { name: "Account" })).toHaveAttribute("href", "/register")
+    expect(screen.getByRole("link", { name: "Account" })).toHaveAttribute("href", "/login")
 
     const cart = screen.getByRole("link", { name: "Cart, 2 items" })
     expect(cart).toHaveAttribute("href", "/cart")
