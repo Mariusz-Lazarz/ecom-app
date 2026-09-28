@@ -40,6 +40,10 @@ async function signIn(page: Page, emailValue: string, password: string) {
   await page.getByRole("button", { name: "Sign in" }).click()
 }
 
+function toast(page: Page, title: string) {
+  return page.locator("[data-sonner-toast]").filter({ hasText: title })
+}
+
 async function sessionUser(page: Page) {
   const res = await page.request.get("/api/auth/session")
   return (await res.json())?.user ?? null
@@ -58,6 +62,11 @@ test("signs in with the right password and lands on the home page", async ({ pag
 
   await expect(page).toHaveURL("/")
   expect(await sessionUser(page)).toMatchObject({ email, name: "Jan Kowalski" })
+  await expect(toast(page, "Welcome back!")).toContainText("You're signed in.")
+
+  // The flash toast is shown once: reloading doesn't bring it back.
+  await page.reload()
+  await expect(page.locator("[data-sonner-toast]")).toHaveCount(0)
 
   // Signed-in users are bounced away from the sign-in page.
   await page.goto("/login")
@@ -72,6 +81,7 @@ test("signs in with the right password and lands on the home page", async ({ pag
   await page.getByRole("button", { name: "Log out" }).click()
   await expect(page).toHaveURL("/")
   expect(await sessionUser(page)).toBeNull()
+  await expect(toast(page, "You've been signed out.")).toBeVisible()
   await page.getByRole("link", { name: "Account" }).click()
   await expect(page).toHaveURL("/login")
 })
@@ -88,6 +98,8 @@ test("rejects a wrong password and keeps the user signed out", async ({ page }) 
   await expect(page).toHaveURL("/login")
   await expect(page.getByLabel("Email")).toHaveValue(email)
   expect(await sessionUser(page)).toBeNull()
+  // Failed sign-ins report inline only; no success toast is queued.
+  await expect(page.locator("[data-sonner-toast]")).toHaveCount(0)
 })
 
 test("rejects an unknown email with the same message", async ({ page }) => {
