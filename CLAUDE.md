@@ -15,8 +15,8 @@ This Next.js version differs from older ones. For example, middleware is `src/pr
 ## Commands
 
 ```bash
-docker compose up -d            # local Postgres 17 (reads .env / defaults ecom:ecom@localhost:5432/ecom)
-cp .env.example .env.local      # needs DATABASE_URL and AUTH_SECRET
+docker compose up -d            # local Postgres 17 + S3Mock media bucket (reads .env / defaults ecom:ecom@localhost:5432/ecom)
+cp .env.example .env.local      # needs DATABASE_URL, AUTH_SECRET and the S3_* / MEDIA_PUBLIC_URL media vars
 npm run db:migrate              # applies every db/migrations/*.sql in name order (idempotent)
 npm run dev
 
@@ -26,10 +26,11 @@ npm test                                # Vitest unit tests (tests/unit, jsdom)
 npx vitest run tests/unit/payments.test.ts      # a single file
 npx vitest run -t "returns the categories"      # a single test by name
 npm run test:e2e                        # Playwright: builds + `next start` on port 3100, desktop + mobile projects
+npm run test:integration                # Vitest against the real docker compose services (tests/integration)
 npx playwright test tests/e2e/login.spec.ts --project=desktop
 ```
 
-CI (`.github/workflows/ci.yml`, Node 24) runs lint, `next typegen`, `tsc --noEmit`, `npm test` and `npm run build`. It does not run the e2e tests.
+CI (`.github/workflows/ci.yml`, Node 24) runs lint, `next typegen`, `tsc --noEmit`, `npm test` and `npm run build`. It does not run the e2e or integration tests, which need `docker compose up -d`.
 
 ## Architecture
 
@@ -38,9 +39,10 @@ CI (`.github/workflows/ci.yml`, Node 24) runs lint, `next typegen`, `tsc --noEmi
 - **Static vs DB data**: `src/lib/data.ts` holds hardcoded site config, nav links and featured products. Categories come from the DB (`listCategories`); the static `categories` array is used only by the footer.
 - **Auth**: `src/auth.ts` configures Auth.js with a Credentials provider (bcrypt) and JWT sessions. Login and registration forms post to Server Actions in `src/app/actions/`, which validate with Zod schemas from `src/lib/validation/`. They return a `FormState` (`errors`, `values`, `message`), are used with `useActionState`, and never echo passwords back. `login` calls `signIn` with `redirect: false` and redirects itself, so it can queue a flash toast first. Pages guard access with `await auth()` and `redirect()`.
 - **Errors**: `src/lib/errors.ts` defines `AppError` subclasses (status + code), `toErrorBody()` (the only place that decides what reaches the client; unknown errors become a generic 500) and `logError()` (4xx → warn, others → error with stack). Route Handlers must be wrapped in `withErrorHandler` (`src/lib/api/handler.ts`). The wrapper turns thrown errors and ZodErrors into `{ error: { code, message, details? } }`, rethrows Next control-flow errors, and logs status and duration.
+- **Media storage**: `src/lib/storage.ts` (server-only) talks to any S3-compatible bucket through `@aws-sdk/client-s3`, configured entirely from `S3_*` env vars. Locally that's S3Mock from `docker compose`; LocalStack isn't used because it now requires an account token. In production the same code points at AWS S3 or Cloudflare R2. `uploadImage(bytes, folder)` accepts JPEG, PNG, WebP or AVIF up to 10 MB, detected from magic bytes. It then normalises the image with `sharp`: it applies the EXIF orientation, shrinks the image to fit 2000 px, re-encodes it as WebP at quality 80, strips all metadata including GPS, and refuses anything over 50 MP. The result is stored under a hash of its bytes (`<folder>/<sha256>.webp`) with `Cache-Control: public, max-age=31536000, immutable`. The function returns the public URL, dimensions, and original and stored sizes. `mediaUrl(key)` builds URLs from `MEDIA_PUBLIC_URL`, which is the CDN in front of the bucket and is also read at build time by `next.config.ts`. Render stored images with `next/image`: optimised variants are cached for 31 days (`minimumCacheTTL`), and `dangerouslyAllowLocalIP` is only on when the media host is localhost. `/api/health` checks the database and the bucket.
 - **Logging**: `src/lib/logger.ts` is a dependency-free logger that works on server, edge and browser. Use `logger.child({ scope })`. It redacts sensitive keys (password/token/hash/cookie…), prints pretty output in dev and JSON in prod, and is quiet (`warn`) under tests. `src/proxy.ts` assigns an `x-request-id` that route handlers log. `src/instrumentation.ts` logs unhandled request errors along with their digest.
 - **Notifications**: toasts use sonner through the shadcn `Toaster` (`src/components/ui/sonner.tsx`), mounted once in the root layout next to `FlashToaster`. Client code calls `notify` from `src/lib/notify.ts` (`success`/`error`/`warning`/`info`/`show`/`promise`/`dismiss`) and doesn't import `sonner` directly. Server Actions and Route Handlers call `await flash({ type, title, description? })` from `src/lib/flash.ts` (server-only). It stores the notification in a short-lived, non-httpOnly `flash` cookie that survives `redirect()`. `FlashToaster` shows it after the next navigation (or cookie change) and deletes it. Inline form errors stay inline; toasts are for outcomes the user should notice after an action.
-- **UI**: `src/components/ui/` contains shadcn-generated primitives. Add new ones with `npx shadcn@latest add <name>` (style `base-nova`, config in `components.json`) rather than writing them by hand. Base UI composes with a `render` prop rather than `asChild`. Page-specific pieces live in `src/components/<area>/`. Remote images are allowed only from the specific Unsplash URL pattern in `next.config.ts`.
+- **UI**: `src/components/ui/` contains shadcn-generated primitives. Add new ones with `npx shadcn@latest add <name>` (style `base-nova`, config in `components.json`) rather than writing them by hand. Base UI composes with a `render` prop rather than `asChild`. Page-specific pieces live in `src/components/<area>/`. `next/image` accepts remote images only from the specific Unsplash URL pattern and the `MEDIA_PUBLIC_URL` host, both listed in `next.config.ts`.
 - **Icons**: `lucide-react` is the only icon library (`import { ShoppingBag } from "lucide-react"`). Size icons with Tailwind classes (`className="size-4"`), not the `size` prop. Don't add other icon packages.
 - **Animations**: Lottie animations load their WASM from `public/lottie/dotlottie-player.wasm`, which must be kept in sync with the installed `@lottiefiles/dotlottie-web`.
 
@@ -48,6 +50,7 @@ CI (`.github/workflows/ci.yml`, Node 24) runs lint, `next typegen`, `tsc --noEmi
 
 - Unit tests live in `tests/unit/` and import via the `@/` alias. `tests/unit/setup.tsx` globally mocks the Lottie player (jsdom has no canvas/WASM).
 - Modules that import `server-only` require `vi.mock("server-only", () => ({}))`. Mock the domain module (e.g. `@/lib/categories`) rather than the DB, then `await import(...)` the module under test.
+- Integration tests live in `tests/integration/` (own config: `vitest.integration.config.mts`, node environment) and call domain modules against the real services instead of mocking them. They clean up what they create.
 - E2E tests run against a production build, not the dev server.
 
 ## Development guidelines
