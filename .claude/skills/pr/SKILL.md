@@ -10,7 +10,7 @@ A PR is the final, reviewer-facing summary of a piece of work. Commits are worki
 ## 1. Commit and push
 
 - The user creates the feature branch by hand before running this skill. Use the current branch as is; don't create, switch or rename branches. If the current branch is `dev` or the repo's default branch, stop before committing anything and ask the user to create the branch.
-- If there are uncommitted changes, commit them as one commit with a clear message. Stage files by name. Never commit secrets (`.env*`, keys) or build output.
+- If there are uncommitted changes, commit them by following the `/commit` skill (`.claude/skills/commit/SKILL.md`): small Conventional Commits, files staged by name, no secrets or build output.
 - Never rewrite existing commits (no squash, rebase, amend or force-push).
 - `git push -u origin HEAD`
 
@@ -142,7 +142,7 @@ For the key scenarios: the `curl` command, then the response JSON. Trim long arr
 - Anything not checked, and why. Write "Nothing — all changes were verified above." if everything was checked.
 ````
 
-Title: short and imperative, describing the end result (e.g. `Add working cart: API routes + live header counter`). No `feat:` prefixes unless the repo's history uses them.
+Title: short and imperative, describing the end result (e.g. `Add working cart: API routes + live header counter`). No Conventional Commit prefix (`feat:`): commits carry those, the PR title reads as plain English.
 
 ## 5. Open or update the PR
 
