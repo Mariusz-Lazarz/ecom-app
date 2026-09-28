@@ -48,3 +48,24 @@ CI (`.github/workflows/ci.yml`, Node 24) runs lint, `next typegen`, `tsc --noEmi
 - Unit tests live in `tests/unit/` and import via the `@/` alias. `tests/unit/setup.tsx` globally mocks the Lottie player (jsdom has no canvas/WASM).
 - Modules that import `server-only` require `vi.mock("server-only", () => ({}))`. Mock the domain module (e.g. `@/lib/categories`) rather than the DB, then `await import(...)` the module under test.
 - E2E tests run against a production build, not the dev server.
+
+## Development guidelines
+
+### Documentation updates
+
+Docstrings, comments and doc files describe only the current state of the code. When a change makes documentation outdated, rewrite it; don't append the new decision next to the old one.
+
+- No changelog-style traces in docs ("previously X, now Y", "updated because…"). Why *now* differs from *before* belongs in the commit message or PR description.
+- Before editing a doc block, read it in full and check the whole block still holds together.
+- If a doc you're touching already has stale or conflicting statements, clean them up instead of adding another one on top.
+
+### Test changes
+
+When a test fails, the default is to fix the code, not the test. Never edit expectations, assertions or mocks just to make a test pass.
+
+- Update a test only when the behavior it checks changed on purpose as part of the task.
+- If it's unclear whether the code or the test is wrong, stop and ask: explain what the test expects, what the code does and why they disagree.
+
+### Writing tests
+
+Tests exercise behavior, not just "it runs". Before writing assertions, go through the cases that apply: happy path, boundaries (empty, 0, min/max, off-by-one), invalid or missing input, error paths (assert the specific error/status), and state-dependent cases (duplicate, already exists, empty DB). Assert on actual values, shapes and side effects, not truthiness or "didn't throw".
