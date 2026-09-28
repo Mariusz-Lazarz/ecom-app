@@ -17,5 +17,23 @@ services:
       timeout: 3s
       retries: 10
 
+  # S3-compatible object storage for product photos. The app only speaks the S3 API, so
+  # production can point the same env vars at AWS S3 or Cloudflare R2 instead.
+  s3:
+    image: adobe/s3mock:5
+    container_name: ecom-s3
+    restart: unless-stopped
+    # The image runs as an unprivileged user that can't write to a fresh named volume.
+    user: root
+    environment:
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: ${S3_BUCKET:-northcart-media}
+      COM_ADOBE_TESTING_S3MOCK_STORE_ROOT: /data
+      COM_ADOBE_TESTING_S3MOCK_STORE_RETAIN_FILES_ON_EXIT: "true"
+    ports:
+      - "${S3_PORT:-9090}:9090"
+    volumes:
+      - s3-data:/data
+
 volumes:
   db-data:
+  s3-data:
