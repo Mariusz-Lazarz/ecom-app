@@ -6,7 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Northcart: a hobby e-commerce storefront built on Next.js 16 (App Router, React 19), Tailwind v4, shadcn/ui (`base-nova` style, built on `@base-ui/react`, **not** Radix), Auth.js v5 (next-auth beta) and raw `pg` against Postgres. There is no ORM. PRs target the `dev` branch, not `main`.
+Northcart: a hobby e-commerce storefront built on Next.js 16 (App Router, React 19), Tailwind v4, shadcn/ui (`base-nova` style, built on `@base-ui/react`, **not** Radix), Auth.js v5 (next-auth beta) and raw `pg` against Postgres. There is no ORM.
+
+Work on a branch cut from `dev` (`feature/<short-name>`, `fix/<short-name>`); PRs target `dev`, never `main`.
 
 This Next.js version differs from older ones. For example, middleware is `src/proxy.ts` (exported `proxy` function), and error boundaries receive `retry` rather than `reset`. Check `node_modules/next/dist/docs/` before relying on remembered APIs.
 
@@ -37,7 +39,9 @@ CI (`.github/workflows/ci.yml`, Node 24) runs lint, `next typegen`, `tsc --noEmi
 - **Auth**: `src/auth.ts` configures Auth.js with a Credentials provider (bcrypt) and JWT sessions. Login and registration forms post to Server Actions in `src/app/actions/`, which validate with Zod schemas from `src/lib/validation/`. They return a `FormState` (`errors`, `values`, `message`), are used with `useActionState`, and never echo passwords back. `login` has to let Next's redirect error propagate after `signIn` succeeds. Pages guard access with `await auth()` and `redirect()`.
 - **Errors**: `src/lib/errors.ts` defines `AppError` subclasses (status + code), `toErrorBody()` (the only place that decides what reaches the client; unknown errors become a generic 500) and `logError()` (4xx → warn, others → error with stack). Route Handlers must be wrapped in `withErrorHandler` (`src/lib/api/handler.ts`). The wrapper turns thrown errors and ZodErrors into `{ error: { code, message, details? } }`, rethrows Next control-flow errors, and logs status and duration.
 - **Logging**: `src/lib/logger.ts` is a dependency-free logger that works on server, edge and browser. Use `logger.child({ scope })`. It redacts sensitive keys (password/token/hash/cookie…), prints pretty output in dev and JSON in prod, and is quiet (`warn`) under tests. `src/proxy.ts` assigns an `x-request-id` that route handlers log. `src/instrumentation.ts` logs unhandled request errors along with their digest.
-- **UI**: `src/components/ui/` contains shadcn-generated primitives. Base UI composes with a `render` prop rather than `asChild`. Page-specific pieces live in `src/components/<area>/`. Lottie animations load their WASM from `public/lottie/dotlottie-player.wasm`, which must be kept in sync with the installed `@lottiefiles/dotlottie-web`. Remote images are allowed only from the specific Unsplash URL pattern in `next.config.ts`.
+- **UI**: `src/components/ui/` contains shadcn-generated primitives. Add new ones with `npx shadcn@latest add <name>` (style `base-nova`, config in `components.json`) rather than writing them by hand. Base UI composes with a `render` prop rather than `asChild`. Page-specific pieces live in `src/components/<area>/`. Remote images are allowed only from the specific Unsplash URL pattern in `next.config.ts`.
+- **Icons**: `lucide-react` is the only icon library (`import { ShoppingBag } from "lucide-react"`). Size icons with Tailwind classes (`className="size-4"`), not the `size` prop. Don't add other icon packages.
+- **Animations**: Lottie animations load their WASM from `public/lottie/dotlottie-player.wasm`, which must be kept in sync with the installed `@lottiefiles/dotlottie-web`.
 
 ## Testing conventions
 
