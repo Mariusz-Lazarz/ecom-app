@@ -11,12 +11,13 @@ A PR is the final, reviewer-facing summary of a piece of work. Commits are worki
 
 - The user creates the feature branch by hand before running this skill. Use the current branch as is; don't create, switch or rename branches. If the current branch is `dev` or the repo's default branch, stop before committing anything and ask the user to create the branch.
 - If there are uncommitted changes, commit them by following the `/commit` skill (`.claude/skills/commit/SKILL.md`): small Conventional Commits, files staged by name, no secrets or build output.
-- Never rewrite existing commits (no squash, rebase, amend or force-push).
-- `git push -u origin HEAD`
+- Rebase onto the branch this one was cut from: `git fetch origin && git rebase origin/<parent>`. It's usually `dev`; otherwise find it with `git reflog show <branch>` ("Created from …") or by comparing `git merge-base` with the candidate branches. On conflicts, stop and ask the user.
+- Apart from that rebase, never rewrite commits (no squash or amend).
+- `git push -u origin HEAD`. If the rebase rewrote already-pushed commits, use `--force-with-lease`.
 
 ## 2. Understand the change
 
-Base is `dev` (PRs never target `main`). Only if `origin/dev` doesn't exist, fall back to the default branch: `gh repo view --json defaultBranchRef -q .defaultBranchRef.name`.
+Base is the parent branch from step 1, usually `dev` (PRs never target `main`). Only if `origin/dev` doesn't exist, fall back to the default branch: `gh repo view --json defaultBranchRef -q .defaultBranchRef.name`.
 
 - `git log --oneline <base>..HEAD` shows the steps taken.
 - `git diff <base>...HEAD --stat` then the full diff show what actually changed.
@@ -55,11 +56,7 @@ Everything in Proof must come from something you actually ran in this session. N
    ```
    It pushes the files to the orphan `pr-assets` branch (never merged, keeps code history clean) and prints one URL per file, in order. Use these URLs exactly.
 
-**Diagram** (optional). Add one when a picture explains the change faster than text: a new flow between components, a data model, a request lifecycle. Never add one just to decorate the PR.
-- Always an **SVG** file, never Mermaid or ASCII. If the work already produced one (in the diff or your scratchpad), reuse it. Otherwise hand-write it in your scratchpad.
-- Keep it small (roughly ≤12 nodes) and draw only what this PR adds or changes, using real names (files, functions, routes). Give it a solid white background `<rect>` so it reads in GitHub's dark theme, use web-safe fonts, and put no scripts or external references in it.
-- Render it to PNG with the Playwright snippet above (`page.goto("file://<path>.svg")`) and look at it before using it. Overlapping text or clipped boxes aren't acceptable.
-- Upload the `.svg` with `upload-screenshots.sh` and embed the printed URL as an image. `raw.githubusercontent.com` serves it as `image/svg+xml`, so it renders in the PR body.
+**Diagram** (only if the diff contains one). Never create diagrams yourself; they are part of the code and are written by whoever authors the change. If the diff adds or changes a diagram file (e.g. `.svg`), it's already pushed with the branch, so embed it straight from the repo: `https://github.com/<owner>/<repo>/blob/<head-sha>/<path>?raw=true`. Use the pushed commit SHA, not the branch name, so the link survives branch deletion. Otherwise leave the Diagram section out.
 
 **API** (when endpoints were added or changed). Hit the real server with `curl`. One row per scenario that exercises the change: the happy path plus the meaningful failures (400/401/404, validation, security checks like ignored client-supplied prices). Don't log every call made during development. Never include server logs, headers, cookies, tokens or secrets.
 
@@ -96,7 +93,7 @@ Explain the change clearly and completely, as behavior, not as a file list. Grou
 
 ## Diagram
 
-Optional. One line saying what it shows, then the uploaded SVG:
+Only for a diagram from the diff. One line saying what it shows, then the file embedded from the repo:
 ![Request flow for the cart API](url)
 
 ## Important files
