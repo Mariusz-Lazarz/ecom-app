@@ -1,19 +1,35 @@
 import Link from "next/link"
+import { unstable_rethrow } from "next/navigation"
 import { ShoppingBag, User } from "lucide-react"
 
 import { auth } from "@/auth"
+import { CartSheet } from "@/components/cart/cart-sheet"
 import { HeaderSearch } from "@/components/header-search"
 import { MobileNav } from "@/components/mobile-nav"
 import { buttonVariants } from "@/components/ui/button"
+import { getCartCount } from "@/lib/cart"
 import { navLinks, siteConfig } from "@/lib/data"
+import { logError } from "@/lib/errors"
+import { shippingRules } from "@/lib/shipping"
+
+// The badge must not take the page down with it: without a count the header shows an empty cart.
+async function cartCount() {
+  try {
+    return await getCartCount()
+  } catch (err) {
+    unstable_rethrow(err)
+    logError(err, "header.cartCount")
+    return 0
+  }
+}
 
 export async function SiteHeader() {
-  const session = await auth()
+  const [session, count] = await Promise.all([auth(), cartCount()])
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur supports-backdrop-filter:bg-background/60">
       <div className="bg-primary px-4 py-2 text-center text-xs font-medium text-primary-foreground">
-        Free shipping on orders over $50 · 30-day free returns
+        Free shipping on orders over ${shippingRules.freeThreshold} · 30-day free returns
       </div>
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4 sm:px-6 lg:px-8">
         <MobileNav />
@@ -46,16 +62,7 @@ export async function SiteHeader() {
           >
             <User />
           </Link>
-          <Link
-            href="/cart"
-            aria-label="Cart, 2 items"
-            className={buttonVariants({ variant: "ghost", size: "icon", className: "relative" })}
-          >
-            <ShoppingBag />
-            <span className="absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
-              2
-            </span>
-          </Link>
+          <CartSheet count={count} />
         </div>
       </div>
     </header>

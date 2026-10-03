@@ -6,10 +6,15 @@ const auth = vi.fn()
 
 vi.mock("@/auth", () => ({ auth: () => auth() }))
 
+const getCartCount = vi.fn<() => Promise<number>>()
+vi.mock("server-only", () => ({}))
+vi.mock("@/lib/cart", () => ({ getCartCount: () => getCartCount() }))
+
 const location = { pathname: "/", search: "" }
 vi.mock("next/navigation", () => ({
   usePathname: () => location.pathname,
   useSearchParams: () => new URLSearchParams(location.search),
+  unstable_rethrow: () => {},
 }))
 
 const { SiteHeader } = await import("@/components/site-header")
@@ -18,6 +23,7 @@ const { navLinks, siteConfig } = await import("@/lib/data")
 describe("SiteHeader", () => {
   beforeEach(() => {
     auth.mockReset().mockResolvedValue(null)
+    getCartCount.mockReset().mockResolvedValue(0)
     location.pathname = "/"
     location.search = ""
   })
@@ -46,14 +52,36 @@ describe("SiteHeader", () => {
     )
   })
 
-  it("links account and cart icons to their pages with accessible names", async () => {
+  it("links the account icon to the sign-in page when signed out", async () => {
     render(await SiteHeader())
 
     expect(screen.getByRole("link", { name: "Account" })).toHaveAttribute("href", "/login")
+  })
+
+  it("links the cart icon to /cart with the server-side item count in its name and badge", async () => {
+    getCartCount.mockResolvedValue(2)
+    render(await SiteHeader())
 
     const cart = screen.getByRole("link", { name: "Cart, 2 items" })
     expect(cart).toHaveAttribute("href", "/cart")
-    expect(cart).toHaveTextContent("2")
+    expect(within(cart).getByTestId("cart-badge")).toHaveTextContent("2")
+    expect(getCartCount).toHaveBeenCalledOnce()
+  })
+
+  it("hides the cart badge when the cart is empty", async () => {
+    render(await SiteHeader())
+
+    const cart = screen.getByRole("link", { name: "Cart, 0 items" })
+    expect(cart).toHaveAttribute("href", "/cart")
+    expect(within(cart).queryByTestId("cart-badge")).not.toBeInTheDocument()
+  })
+
+  it("still renders, with an empty cart icon, when the count can't be read", async () => {
+    getCartCount.mockRejectedValue(new Error("connection refused"))
+    render(await SiteHeader())
+
+    expect(screen.getByRole("link", { name: "Cart, 0 items" })).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: siteConfig.name })).toBeInTheDocument()
   })
 
   it("links the account icon to the account page when signed in", async () => {
