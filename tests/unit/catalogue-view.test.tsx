@@ -7,6 +7,7 @@ import { makeProduct } from "./fixtures/products"
 
 // Product cards import the cart Server Actions, which outside Next.js would pull in server-only modules.
 vi.mock("@/app/actions/cart", () => ({ addToCart: vi.fn() }))
+vi.mock("@/app/actions/wishlist", () => ({ toggleWishlistItem: vi.fn() }))
 
 const push = vi.fn()
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }))

@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { ChevronRight, Package } from "lucide-react"
+import { ChevronRight, Heart, Package, type LucideIcon } from "lucide-react"
 
 import { logout } from "@/app/actions/logout"
 import { SiteFooter } from "@/components/site-footer"
@@ -31,20 +31,10 @@ export default async function AccountPage() {
           </h1>
           {session.user.role === "admin" && <Badge>Admin</Badge>}
         </div>
-        <Card className="w-full max-w-md transition-colors hover:bg-muted/50">
-          <CardContent>
-            <Link href="/account/orders" className="flex items-center gap-3">
-              <span className="flex size-10 items-center justify-center rounded-full bg-muted">
-                <Package className="size-5" />
-              </span>
-              <span className="flex-1">
-                <span className="block font-medium">Your orders</span>
-                <span className="block text-sm text-muted-foreground">Track, review or cancel your orders</span>
-              </span>
-              <ChevronRight className="size-4 text-muted-foreground" />
-            </Link>
-          </CardContent>
-        </Card>
+        <div className="grid w-full max-w-md gap-3">
+          <AccountLink href="/account/orders" icon={Package} title="Your orders" description="Track, review or cancel your orders" />
+          <AccountLink href="/account/wishlist" icon={Heart} title="Your wishlist" description="Products you saved for later" />
+        </div>
         <form action={logout}>
           <Button type="submit" variant="outline">
             Log out
@@ -53,5 +43,34 @@ export default async function AccountPage() {
       </main>
       <SiteFooter />
     </>
+  )
+}
+
+function AccountLink({
+  href,
+  icon: Icon,
+  title,
+  description,
+}: {
+  href: string
+  icon: LucideIcon
+  title: string
+  description: string
+}) {
+  return (
+    <Card className="transition-colors hover:bg-muted/50">
+      <CardContent>
+        <Link href={href} className="flex items-center gap-3">
+          <span className="flex size-10 items-center justify-center rounded-full bg-muted">
+            <Icon className="size-5" />
+          </span>
+          <span className="flex-1">
+            <span className="block font-medium">{title}</span>
+            <span className="block text-sm text-muted-foreground">{description}</span>
+          </span>
+          <ChevronRight className="size-4 text-muted-foreground" />
+        </Link>
+      </CardContent>
+    </Card>
   )
 }

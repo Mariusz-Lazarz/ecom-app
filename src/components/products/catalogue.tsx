@@ -10,6 +10,7 @@ import type { Category } from "@/lib/categories"
 import { catalogueHref, type CatalogueQuery } from "@/lib/catalogue"
 import type { ProductList } from "@/lib/products"
 import { cn } from "@/lib/utils"
+import type { WishlistIds } from "@/lib/wishlist"
 
 type CatalogueProps = {
   // The route the filters link back to: "/products" or "/categories/<slug>".
@@ -22,10 +23,12 @@ type CatalogueProps = {
   activeCategory?: string
   categories: Category[]
   list: ProductList
+  // The visitor's saved products on this page, for the hearts on the cards (see ProductCard).
+  wishlist?: WishlistIds
 }
 
 /** The product listing shared by /products and /categories/[slug]. All filter state lives in the URL. */
-export function Catalogue({ basePath, title, description, query, activeCategory, categories, list }: CatalogueProps) {
+export function Catalogue({ basePath, title, description, query, activeCategory, categories, list, wishlist }: CatalogueProps) {
   // Switching category keeps the search, sort and sale filter but starts again at page 1.
   const carried = { q: query.q, sort: query.sort, onSale: query.onSale }
   const first = (list.page - 1) * list.pageSize + 1
@@ -108,7 +111,7 @@ export function Catalogue({ basePath, title, description, query, activeCategory,
             <ul className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
               {list.items.map((product, index) => (
                 <li key={product.id} className="grid">
-                  <ProductCard product={product} eager={index < 3} />
+                  <ProductCard product={product} eager={index < 3} wishlist={wishlist} />
                 </li>
               ))}
             </ul>

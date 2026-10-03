@@ -6,6 +6,7 @@ import { SiteHeader } from "@/components/site-header"
 import { listCategories } from "@/lib/categories"
 import { parseCatalogueQuery } from "@/lib/catalogue"
 import { listProducts } from "@/lib/products"
+import { getWishlistedIds } from "@/lib/wishlist"
 
 export const metadata: Metadata = {
   title: "Shop all products — Northcart",
@@ -15,6 +16,7 @@ export const metadata: Metadata = {
 export default async function ProductsPage({ searchParams }: PageProps<"/products">) {
   const query = parseCatalogueQuery(await searchParams)
   const [categories, list] = await Promise.all([listCategories(), listProducts(query)])
+  const wishlist = await getWishlistedIds(list.items.map((product) => product.id))
   const category = query.category ? categories.find((c) => c.slug === query.category) : undefined
 
   return (
@@ -29,6 +31,7 @@ export default async function ProductsPage({ searchParams }: PageProps<"/product
           activeCategory={query.category}
           categories={categories}
           list={list}
+          wishlist={wishlist}
         />
       </main>
       <SiteFooter />

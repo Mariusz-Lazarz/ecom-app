@@ -8,6 +8,7 @@ import { SiteHeader } from "@/components/site-header"
 import { listCategories } from "@/lib/categories"
 import { parseCatalogueQuery } from "@/lib/catalogue"
 import { listProducts } from "@/lib/products"
+import { getWishlistedIds } from "@/lib/wishlist"
 
 // generateMetadata and the page both need the categories; cache() makes that one query per request.
 const loadCategories = cache(listCategories)
@@ -30,6 +31,7 @@ export default async function CategoryPage({ params, searchParams }: PageProps<"
   if (!category) notFound()
 
   const list = await listProducts({ ...query, category: category.slug })
+  const wishlist = await getWishlistedIds(list.items.map((product) => product.id))
 
   return (
     <>
@@ -43,6 +45,7 @@ export default async function CategoryPage({ params, searchParams }: PageProps<"
           activeCategory={category.slug}
           categories={categories}
           list={list}
+          wishlist={wishlist}
         />
       </main>
       <SiteFooter />

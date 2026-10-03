@@ -9,6 +9,8 @@ vi.mock("@/lib/notify", () => ({ notify: { success: (...args: unknown[]) => noti
 
 const addToCart = vi.fn()
 vi.mock("@/app/actions/cart", () => ({ addToCart: (...args: unknown[]) => addToCart(...args) }))
+vi.mock("@/app/actions/wishlist", () => ({ toggleWishlistItem: vi.fn() }))
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }))
 
 const { ProductCard } = await import("@/components/products/product-card")
 
@@ -20,6 +22,22 @@ beforeEach(() => {
 })
 
 describe("ProductCard", () => {
+  it("has no heart unless given the visitor's wishlist", () => {
+    render(<ProductCard product={makeProduct({ name: "Aria" })} />)
+
+    expect(within(card()).queryByRole("button", { name: /wishlist/ })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ["a guest", null, "Save Aria to wishlist", "false"],
+    ["a customer who hasn't saved it", new Set<string>(["id-other"]), "Save Aria to wishlist", "false"],
+    ["a customer who saved it", new Set<string>(["id-halden-aria"]), "Remove Aria from wishlist", "true"],
+  ])("shows a heart toggle for %s", (_who, wishlist, name, pressed) => {
+    render(<ProductCard product={makeProduct({ slug: "halden-aria", name: "Aria" })} wishlist={wishlist} />)
+
+    expect(within(card()).getByRole("button", { name })).toHaveAttribute("aria-pressed", pressed)
+  })
+
   it("announces a single link to the product page, named after the product", () => {
     render(<ProductCard product={makeProduct({ slug: "halden-aria", name: "Aria" })} />)
 
