@@ -21,9 +21,12 @@ export async function requireUser(returnTo?: string): Promise<UserSession> {
   return session as UserSession
 }
 
-/** Returns an admin's session; signed-out visitors go to /login, other users get a 404. */
-export async function requireAdmin() {
-  const session = await requireUser()
+/**
+ * Returns an admin's session. Signed-out visitors go to /login (and back to `returnTo` afterwards,
+ * as with `requireUser`); other users get a 404, so admin pages don't reveal that they exist.
+ */
+export async function requireAdmin(returnTo?: string) {
+  const session = await requireUser(returnTo)
   if (session.user.role !== "admin") notFound()
   return session
 }

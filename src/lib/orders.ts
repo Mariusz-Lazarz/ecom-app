@@ -404,6 +404,13 @@ function toSummary(row: SummaryRow): OrderSummary {
   }
 }
 
+function toAdminSummary(row: AdminSummaryRow): AdminOrderSummary {
+  return {
+    ...toSummary(row),
+    customer: { id: row.user_id, name: `${row.first_name} ${row.last_name}`, email: row.email },
+  }
+}
+
 function toPage<T>(items: T[], total: number, page: number, pageSize: number): Page<T> {
   return { items, page, pageSize, total, pageCount: Math.ceil(total / pageSize) }
 }
@@ -627,11 +634,23 @@ export async function listOrders(options: OrderListOptions = {}): Promise<Page<A
     total = count[0].total
   }
 
-  const items = rows.map((row) => ({
-    ...toSummary(row),
-    customer: { id: row.user_id, name: `${row.first_name} ${row.last_name}`, email: row.email },
-  }))
-  return toPage(items, total, current, size)
+  return toPage(rows.map(toAdminSummary), total, current, size)
+}
+
+/** Statuses an order waits in for the shop to act: the admin dashboard's "Needs attention" list. */
+export const AWAITING_ACTION_STATUSES: readonly OrderStatus[] = ["pending", "processing"]
+
+/** The oldest orders still waiting for the shop (`AWAITING_ACTION_STATUSES`), oldest first. */
+export async function listOrdersAwaitingAction(limit = 5): Promise<AdminOrderSummary[]> {
+  const { rows } = await query<AdminSummaryRow>(
+    `SELECT ${SUMMARY_COLUMNS}, u.id AS user_id, u.first_name, u.last_name, u.email, 0 AS total_count
+     FROM orders o JOIN users u ON u.id = o.user_id
+     WHERE o.status = ANY($1::text[])
+     ORDER BY o.created_at, o.number
+     LIMIT $2`,
+    [AWAITING_ACTION_STATUSES, clampPageSize(limit)],
+  )
+  return rows.map(toAdminSummary)
 }
 
 /** Order counts per status and revenue (totals of every order not cancelled or rejected). */

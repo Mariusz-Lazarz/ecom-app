@@ -3,7 +3,7 @@ import type { LucideIcon } from "lucide-react"
 
 import { formatOrderDateTime } from "@/components/orders/format"
 import { ORDER_STATUS_LABELS, type OrderStatus } from "@/lib/order-rules"
-import type { OrderEvent } from "@/lib/orders"
+import type { ActorRole, OrderEvent } from "@/lib/orders"
 import { cn } from "@/lib/utils"
 
 const ICONS: Record<OrderStatus, LucideIcon> = {
@@ -19,14 +19,25 @@ const DEFAULT_NOTES: Partial<Record<OrderStatus, string>> = {
   pending: "Order placed and paid.",
 }
 
-type OrderTimelineProps = {
-  // Oldest first, as `getOrderForUser` / `getOrder` return them.
-  events: Pick<OrderEvent, "id" | "status" | "note" | "createdAt">[]
-  trackingNumber: string | null
+const ACTOR_LABELS: Record<ActorRole, string> = {
+  customer: "Customer",
+  admin: "Admin",
+  system: "System",
 }
 
-/** The order's status history, oldest first; the latest step is highlighted. Shared by customer and admin views. */
-export function OrderTimeline({ events, trackingNumber }: OrderTimelineProps) {
+type OrderTimelineProps = {
+  // Oldest first, as `getOrderForUser` / `getOrder` return them.
+  events: Pick<OrderEvent, "id" | "status" | "actorRole" | "note" | "createdAt">[]
+  trackingNumber: string | null
+  // Admin view: say who made each change ("by Admin") next to its time.
+  showActor?: boolean
+}
+
+/**
+ * The order's status history, oldest first; the latest step is highlighted. Shared by customer and
+ * admin views; the admin view adds who made each change.
+ */
+export function OrderTimeline({ events, trackingNumber, showActor = false }: OrderTimelineProps) {
   return (
     <ol aria-label="Order history" className="space-y-0">
       {events.map((event, index) => {
@@ -48,6 +59,7 @@ export function OrderTimeline({ events, trackingNumber }: OrderTimelineProps) {
               <p className="text-sm font-medium">{ORDER_STATUS_LABELS[event.status]}</p>
               <p className="text-xs text-muted-foreground">
                 <time dateTime={event.createdAt.toISOString()}>{formatOrderDateTime(event.createdAt)}</time>
+                {showActor && <> · by {ACTOR_LABELS[event.actorRole]}</>}
               </p>
               {note && <p className="mt-1 text-sm text-muted-foreground">{note}</p>}
               {event.status === "shipped" && trackingNumber && (

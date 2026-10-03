@@ -118,6 +118,8 @@ describe("Order page", () => {
     expect(steps[2]).toHaveTextContent("Shipped")
     expect(steps[2]).toHaveTextContent("Tracking number: 1Z999AA10123456784")
     expect(screen.getAllByText("1Z999AA10123456784")).toHaveLength(2)
+    // Who made each change is for the admin view only.
+    expect(screen.getByRole("list", { name: "Order history" })).not.toHaveTextContent(/by (Admin|Customer|System)/)
   })
 
   it("shows a cancellation with its note", async () => {

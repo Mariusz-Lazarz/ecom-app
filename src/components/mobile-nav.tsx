@@ -2,17 +2,19 @@
 
 import Link from "next/link"
 import { useState } from "react"
-import { Menu } from "lucide-react"
+import { LayoutDashboard, Menu } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { navLinks, siteConfig } from "@/lib/data"
 
 /**
- * The slide-out menu on small screens. Choosing a link closes it: a link that only changes the query
- * (e.g. /products → /products?onSale=true) keeps the header mounted, so the menu wouldn't close by itself.
+ * The slide-out menu on small screens, with an "Admin" link below the store links for admins.
+ * Choosing a link closes it: a link that only changes the query (e.g. /products →
+ * /products?onSale=true) keeps the header mounted, so the menu wouldn't close by itself.
  */
-export function MobileNav() {
+export function MobileNav({ isAdmin = false }: { isAdmin?: boolean }) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -35,6 +37,19 @@ export function MobileNav() {
               {link.label}
             </Link>
           ))}
+          {isAdmin && (
+            <>
+              <Separator className="my-2" />
+              <Link
+                href="/admin"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-muted"
+              >
+                <LayoutDashboard className="size-4" />
+                Admin
+              </Link>
+            </>
+          )}
         </nav>
       </SheetContent>
     </Sheet>

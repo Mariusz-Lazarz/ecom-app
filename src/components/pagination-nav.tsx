@@ -10,19 +10,21 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination"
-import { catalogueHref, paginationRange, type CatalogueQuery } from "@/lib/catalogue"
+import { paginationRange } from "@/lib/catalogue"
 
-type PaginationProps = {
-  basePath: string
-  query: CatalogueQuery
+type PaginationNavProps = {
+  page: number
   pageCount: number
+  // The link to a page, keeping the list's other filters.
+  href: (page: number) => string
 }
 
-/** Page links for the catalogue, keeping the other filters. Previous / Next are disabled at either end. */
-export function Pagination({ basePath, query, pageCount }: PaginationProps) {
+/**
+ * Numbered page links (catalogue, admin order list) with Previous / Next, which are disabled at
+ * either end. Renders nothing for a single page.
+ */
+export function PaginationNav({ page, pageCount, href }: PaginationNavProps) {
   if (pageCount <= 1) return null
-  const page = query.page
-  const href = (p: number) => catalogueHref(basePath, { ...query, page: p })
   const disabled = buttonVariants({ variant: "ghost", className: "pointer-events-none opacity-50" })
 
   return (
