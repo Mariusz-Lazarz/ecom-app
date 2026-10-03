@@ -61,6 +61,34 @@ describe("login action", () => {
     expect(flash.mock.invocationCallOrder[0]).toBeLessThan(redirect.mock.invocationCallOrder[0])
   })
 
+  it("redirects to a same-origin callbackUrl after signing in", async () => {
+    signIn.mockResolvedValue("http://localhost/")
+
+    await expect(login(undefined, form({ callbackUrl: "/checkout" }))).rejects.toMatchObject({
+      digest: "NEXT_REDIRECT;replace;/checkout;307;",
+    })
+    expect(redirect).toHaveBeenCalledExactlyOnceWith("/checkout")
+  })
+
+  it.each(["https://evil.example/", "//evil.example", "/\\evil.example", "checkout", ""])(
+    "ignores the unsafe callbackUrl %j and redirects home",
+    async (callbackUrl) => {
+      signIn.mockResolvedValue("http://localhost/")
+
+      await expect(login(undefined, form({ callbackUrl }))).rejects.toMatchObject({ digest: "NEXT_REDIRECT;replace;/;307;" })
+      expect(redirect).toHaveBeenCalledExactlyOnceWith("/")
+    },
+  )
+
+  it("doesn't follow the callbackUrl when the sign-in fails", async () => {
+    signIn.mockRejectedValue(new CredentialsSignin())
+
+    const state = await login(undefined, form({ callbackUrl: "/checkout" }))
+
+    expect(state?.message).toBeDefined()
+    expect(redirect).not.toHaveBeenCalled()
+  })
+
   it("merges the guest cart into the signed-in user's cart before redirecting", async () => {
     signIn.mockResolvedValue("http://localhost/")
 

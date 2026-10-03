@@ -9,11 +9,16 @@ import { mergeGuestCart } from "@/lib/cart"
 import { GENERIC_MESSAGE, logError } from "@/lib/errors"
 import { flash } from "@/lib/flash"
 import { logger } from "@/lib/logger"
+import { CALLBACK_PARAM, safeCallbackPath } from "@/lib/safe-redirect"
 import { findUserByEmail } from "@/lib/users"
 import { INVALID_CREDENTIALS_MESSAGE, LoginSchema, type LoginFormState } from "@/lib/validation/login"
 
 const log = logger.child({ scope: "login" })
 
+/**
+ * Signs in with email and password. On success it merges the guest cart, queues a welcome toast
+ * and redirects to the form's `callbackUrl` when that's a same-origin path, otherwise home.
+ */
 export async function login(_state: LoginFormState, formData: FormData): Promise<LoginFormState> {
   const raw = {
     email: String(formData.get("email") ?? ""),
@@ -51,5 +56,5 @@ export async function login(_state: LoginFormState, formData: FormData): Promise
   }
 
   await flash({ type: "success", title: "Welcome back!", description: "You're signed in." })
-  redirect("/")
+  redirect(safeCallbackPath(formData.get(CALLBACK_PARAM)) ?? "/")
 }

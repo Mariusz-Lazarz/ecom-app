@@ -6,9 +6,11 @@ import Link from "next/link"
 import { login } from "@/app/actions/login"
 import { Field } from "@/components/auth/field"
 import { Button } from "@/components/ui/button"
+import { CALLBACK_PARAM } from "@/lib/safe-redirect"
 import type { LoginFormState } from "@/lib/validation/login"
 
-export function LoginForm() {
+/** `callbackUrl` is where to go after signing in; the action re-checks that it's a same-origin path. */
+export function LoginForm({ callbackUrl }: { callbackUrl?: string | null }) {
   const [state, action, pending] = useActionState<LoginFormState, FormData>(login, undefined)
   const errors = state?.errors
 
@@ -16,6 +18,7 @@ export function LoginForm() {
   // key forces inputs to remount so defaultValue picks up the email echoed back by the action.
   return (
     <form action={action} noValidate className="space-y-4" key={JSON.stringify(state?.values)}>
+      {callbackUrl && <input type="hidden" name={CALLBACK_PARAM} value={callbackUrl} />}
       <Field
         name="email"
         label="Email"

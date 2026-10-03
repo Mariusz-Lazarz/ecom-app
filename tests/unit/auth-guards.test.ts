@@ -42,6 +42,29 @@ describe("auth guards", () => {
       expect(redirect).toHaveBeenCalledExactlyOnceWith("/login")
     })
 
+    it("sends signed-out visitors back to returnTo after the login", async () => {
+      auth.mockResolvedValue(null)
+
+      await expect(requireUser("/orders/NC-10001")).rejects.toMatchObject({
+        digest: "NEXT_REDIRECT;replace;/login?callbackUrl=%2Forders%2FNC-10001;307;",
+      })
+      expect(redirect).toHaveBeenCalledExactlyOnceWith("/login?callbackUrl=%2Forders%2FNC-10001")
+    })
+
+    it("drops a returnTo that isn't a same-origin path", async () => {
+      auth.mockResolvedValue(null)
+
+      await expect(requireUser("https://evil.example")).rejects.toMatchObject({ message: "NEXT_REDIRECT" })
+      expect(redirect).toHaveBeenCalledExactlyOnceWith("/login")
+    })
+
+    it("redirects when the session's user has no id", async () => {
+      auth.mockResolvedValue({ user: { name: "Jan" }, expires: "2099-01-01T00:00:00.000Z" })
+
+      await expect(requireUser("/checkout")).rejects.toMatchObject({ message: "NEXT_REDIRECT" })
+      expect(redirect).toHaveBeenCalledExactlyOnceWith("/login?callbackUrl=%2Fcheckout")
+    })
+
     it("redirects when the session has no user", async () => {
       auth.mockResolvedValue({ expires: "2099-01-01T00:00:00.000Z" })
 

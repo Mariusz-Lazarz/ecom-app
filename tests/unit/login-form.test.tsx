@@ -22,6 +22,26 @@ describe("LoginForm", () => {
     expect(screen.getByRole("link", { name: "Create an account" })).toHaveAttribute("href", "/register")
   })
 
+  it("posts the callbackUrl with the credentials, and keeps it after a failed attempt", async () => {
+    login.mockResolvedValue({ message: "Invalid email or password.", values: { email: "jan@example.com" } })
+    render(<LoginForm callbackUrl="/checkout" />)
+    await fillAndSubmit()
+
+    await screen.findByRole("alert")
+    const sent = login.mock.calls.at(-1)![1] as FormData
+    expect(sent.get("callbackUrl")).toBe("/checkout")
+    expect(document.querySelector('input[name="callbackUrl"]')).toHaveValue("/checkout")
+  })
+
+  it("sends no callbackUrl without one", async () => {
+    login.mockResolvedValue({ message: "Invalid email or password.", values: { email: "jan@example.com" } })
+    render(<LoginForm />)
+    await fillAndSubmit()
+
+    await screen.findByRole("alert")
+    expect((login.mock.calls.at(-1)![1] as FormData).has("callbackUrl")).toBe(false)
+  })
+
   it("shows the error from the server and keeps the email", async () => {
     login.mockResolvedValue({ message: "Invalid email or password.", values: { email: "jan@example.com" } })
     render(<LoginForm />)
