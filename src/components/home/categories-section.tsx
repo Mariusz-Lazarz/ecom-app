@@ -12,7 +12,8 @@ import {
 } from "lucide-react"
 
 import { SectionHeading } from "@/components/home/section-heading"
-import { listCategories } from "@/lib/categories"
+import { listCategories, type Category } from "@/lib/categories"
+import { cn } from "@/lib/utils"
 
 // Categories store their icon by name; unknown names fall back to a generic tag.
 const icons: Record<string, LucideIcon> = {
@@ -22,6 +23,33 @@ const icons: Record<string, LucideIcon> = {
   camera: Camera,
   glasses: Glasses,
   backpack: Backpack,
+}
+
+/** One tile per category, each linking to its catalogue page. */
+export function CategoryGrid({ categories, className }: { categories: Category[]; className?: string }) {
+  return (
+    <div className={cn("grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6", className)}>
+      {categories.map(({ slug, name, icon }) => {
+        const Icon = icons[icon] ?? Tag
+        return (
+          <Link
+            key={slug}
+            href={`/categories/${slug}`}
+            className="group flex flex-col items-center gap-3 rounded-xl border bg-card p-6 text-center transition-all hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <span className="flex size-12 items-center justify-center rounded-full bg-muted transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+              <Icon className="size-5" />
+            </span>
+            <span className="font-medium">{name}</span>
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              Shop now
+              <ArrowRight className="size-3 opacity-0 transition-opacity group-hover:opacity-100" />
+            </span>
+          </Link>
+        )
+      })}
+    </div>
+  )
 }
 
 export async function CategoriesSection() {
@@ -35,27 +63,7 @@ export async function CategoriesSection() {
         href="/categories"
         linkLabel="All categories"
       />
-      <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-        {categories.map(({ slug, name, icon }) => {
-          const Icon = icons[icon] ?? Tag
-          return (
-            <Link
-              key={slug}
-              href={`/categories/${slug}`}
-              className="group flex flex-col items-center gap-3 rounded-xl border bg-card p-6 text-center transition-all hover:-translate-y-0.5 hover:shadow-md"
-            >
-              <span className="flex size-12 items-center justify-center rounded-full bg-muted transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
-                <Icon className="size-5" />
-              </span>
-              <span className="font-medium">{name}</span>
-              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                Shop now
-                <ArrowRight className="size-3 opacity-0 transition-opacity group-hover:opacity-100" />
-              </span>
-            </Link>
-          )
-        })}
-      </div>
+      <CategoryGrid categories={categories} className="mt-8" />
     </section>
   )
 }
