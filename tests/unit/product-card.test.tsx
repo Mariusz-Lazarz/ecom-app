@@ -4,14 +4,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { makeProduct } from "./fixtures/products"
 
-const notifyInfo = vi.fn()
-vi.mock("@/lib/notify", () => ({ notify: { info: (...args: unknown[]) => notifyInfo(...args) } }))
+const notifySuccess = vi.fn()
+vi.mock("@/lib/notify", () => ({ notify: { success: (...args: unknown[]) => notifySuccess(...args) } }))
+
+const addToCart = vi.fn()
+vi.mock("@/app/actions/cart", () => ({ addToCart: (...args: unknown[]) => addToCart(...args) }))
 
 const { ProductCard } = await import("@/components/products/product-card")
 
 const card = () => screen.getByRole("link", { name: /Product|Aria/ }).closest<HTMLElement>('[data-slot="card"]')!
 
-beforeEach(() => notifyInfo.mockReset())
+beforeEach(() => {
+  notifySuccess.mockReset()
+  addToCart.mockReset().mockResolvedValue({ ok: true, itemCount: 1 })
+})
 
 describe("ProductCard", () => {
   it("announces a single link to the product page, named after the product", () => {
@@ -100,13 +106,14 @@ describe("ProductCard", () => {
     expect(screen.queryByRole("button", { name: "Add Aria to cart" })).not.toBeInTheDocument()
   })
 
-  it("says the cart is coming soon when adding an in-stock product", async () => {
+  it("quick-adds one unit of an in-stock product to the cart", async () => {
     const user = userEvent.setup()
-    render(<ProductCard product={makeProduct({ name: "Aria" })} />)
+    render(<ProductCard product={makeProduct({ id: "id-aria", name: "Aria" })} />)
 
     expect(within(card()).queryByText("Out of stock")).not.toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: "Add Aria to cart" }))
 
-    expect(notifyInfo).toHaveBeenCalledExactlyOnceWith("Cart coming soon", expect.any(Object))
+    expect(addToCart).toHaveBeenCalledExactlyOnceWith({ productId: "id-aria", quantity: 1 })
+    expect(notifySuccess).toHaveBeenCalledExactlyOnceWith("Added to cart", expect.objectContaining({ description: "Aria" }))
   })
 })

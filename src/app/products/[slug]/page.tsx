@@ -15,6 +15,7 @@ import { SiteHeader } from "@/components/site-header"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { getProductBySlug } from "@/lib/products"
+import { shippingRules } from "@/lib/shipping"
 
 // generateMetadata and the page both need the product; cache() makes that one query per request.
 const loadProduct = cache(getProductBySlug)
@@ -86,11 +87,17 @@ export default async function ProductPage({ params }: PageProps<"/products/[slug
 
             <StockStatus stock={product.stock} />
 
-            <AddToCartButton productName={product.name} inStock={product.inStock} variant="full" />
+            <AddToCartButton
+              productId={product.id}
+              productName={product.name}
+              inStock={product.inStock}
+              stock={product.stock}
+              variant="full"
+            />
 
             <ul className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
               <li className="flex items-center gap-2">
-                <Truck className="size-4" /> Free shipping on orders over $50
+                <Truck className="size-4" /> Free shipping on orders over ${shippingRules.freeThreshold}
               </li>
               <li className="flex items-center gap-2">
                 <RotateCcw className="size-4" /> 30-day free returns

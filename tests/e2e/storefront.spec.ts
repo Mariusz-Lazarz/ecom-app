@@ -287,14 +287,15 @@ test.describe("product page", () => {
     await expect.poll(() => main.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBeGreaterThan(0)
   })
 
-  test("shows related products and an honest add-to-cart", async ({ page }) => {
+  test("shows related products and an add-to-cart with a quantity picker", async ({ page }) => {
     await page.goto("/products/halden-aria-anc-wireless-headphones")
 
     const related = page.locator("section", { has: page.getByRole("heading", { name: "You may also like" }) })
     await expect(related.locator('[data-slot="card"]')).toHaveCount(4)
 
-    await page.getByRole("button", { name: "Add to cart" }).click()
-    await expect(page.getByText("Cart coming soon")).toBeVisible()
+    // Adding is covered by cart.spec.ts, which cleans up the carts it creates.
+    await expect(page.getByRole("textbox", { name: "Quantity", exact: true })).toHaveValue("1")
+    await expect(page.getByRole("button", { name: "Add to cart", exact: true })).toBeEnabled()
   })
 
   test("disables add-to-cart for an out-of-stock product", async ({ page }) => {
