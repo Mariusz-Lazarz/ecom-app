@@ -41,8 +41,17 @@ export function summarize(items: CartItem[], currency: string): Cart {
   return { items, itemCount, subtotalCents, savingsCents, currency: items[0]?.currency ?? currency }
 }
 
-/** The cart as it will look once `change` is saved. A quantity of 0 removes the line, like `updateCartItem`. */
+/**
+ * The cart as it will look once `change` is saved. A quantity of 0 removes the line, like
+ * `updateCartItem`. The applied discount code stays; the totals UI works out what it takes off the
+ * new subtotal (nothing when it drops below the code's minimum).
+ */
 export function applyCartChange(cart: Cart, change: CartChange): Cart {
+  const next = applyLineChange(cart, change)
+  return cart.discount ? { ...next, discount: cart.discount } : next
+}
+
+function applyLineChange(cart: Cart, change: CartChange): Cart {
   switch (change.type) {
     case "clear":
       return summarize([], cart.currency)
@@ -52,7 +61,7 @@ export function applyCartChange(cart: Cart, change: CartChange): Cart {
         cart.currency,
       )
     case "quantity":
-      if (change.quantity <= 0) return applyCartChange(cart, { type: "remove", productId: change.productId })
+      if (change.quantity <= 0) return applyLineChange(cart, { type: "remove", productId: change.productId })
       return summarize(
         cart.items.map((item) => (item.productId === change.productId ? withQuantity(item, change.quantity) : item)),
         cart.currency,

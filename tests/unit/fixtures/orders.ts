@@ -12,6 +12,8 @@ export function makeOrderSummary(overrides: Partial<OrderSummary> = {}): OrderSu
     status: "pending",
     itemCount: 1,
     totalCents: 2599,
+    discountCode: null,
+    discountCents: 0,
     currency: "USD",
     createdAt: new Date("2026-09-20T10:00:00Z"),
     updatedAt: new Date("2026-09-20T10:00:00Z"),

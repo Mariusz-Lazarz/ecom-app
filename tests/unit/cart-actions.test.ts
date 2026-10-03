@@ -1,19 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { ConflictError, NotFoundError } from "@/lib/errors"
+import { ConflictError, NotFoundError, UnauthorizedError } from "@/lib/errors"
 
 const cart = vi.hoisted(() => ({
   addToCart: vi.fn(),
   setQuantity: vi.fn(),
   removeFromCart: vi.fn(),
   clearCart: vi.fn(),
+  applyDiscountCode: vi.fn(),
+  removeDiscountCode: vi.fn(),
 }))
 const refresh = vi.fn()
 
 vi.mock("@/lib/cart", () => cart)
 vi.mock("next/cache", () => ({ refresh: () => refresh() }))
 
-const { addToCart, updateCartItem, removeCartItem, clearCart } = await import("@/app/actions/cart")
+const { addToCart, updateCartItem, removeCartItem, clearCart, applyDiscountCode, removeDiscountCode } = await import(
+  "@/app/actions/cart"
+)
 
 const PRODUCT_ID = "3f2b8c1e-4d5a-4b6c-8d7e-9f0a1b2c3d4e"
 
@@ -197,6 +201,52 @@ describe("clearCart action", () => {
     cart.clearCart.mockRejectedValue(new Error("boom"))
 
     expect(await clearCart()).toEqual({ ok: false, message: "Something went wrong. Please try again." })
+    expect(refresh).not.toHaveBeenCalled()
+  })
+})
+
+describe("applyDiscountCode action", () => {
+  it("applies the trimmed, upper-cased code and re-renders the page", async () => {
+    cart.applyDiscountCode.mockResolvedValue({ code: "WELCOME10", type: "percent", value: 10, minSubtotalCents: 3000 })
+
+    expect(await applyDiscountCode("  welcome10 ")).toEqual({ ok: true, code: "WELCOME10" })
+    expect(cart.applyDiscountCode).toHaveBeenCalledExactlyOnceWith("WELCOME10")
+    expect(refresh).toHaveBeenCalledOnce()
+  })
+
+  it("asks for a code when the field is empty, without touching the cart", async () => {
+    expect(await applyDiscountCode("   ")).toEqual({ ok: false, message: "Enter a discount code." })
+    expect(await applyDiscountCode(undefined as unknown as string)).toEqual({ ok: false, message: "Enter a discount code." })
+    expect(cart.applyDiscountCode).not.toHaveBeenCalled()
+    expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it("passes on why a code can't be used", async () => {
+    cart.applyDiscountCode.mockRejectedValue(new ConflictError("EXPIRED5 has expired."))
+    expect(await applyDiscountCode("expired5")).toEqual({ ok: false, message: "EXPIRED5 has expired." })
+
+    cart.applyDiscountCode.mockRejectedValue(new UnauthorizedError("Sign in to use a discount code."))
+    expect(await applyDiscountCode("WELCOME10")).toEqual({ ok: false, message: "Sign in to use a discount code." })
+    expect(refresh).not.toHaveBeenCalled()
+  })
+
+  it("hides unexpected errors behind a generic message", async () => {
+    cart.applyDiscountCode.mockRejectedValue(new Error("connection reset"))
+    expect(await applyDiscountCode("WELCOME10")).toEqual({ ok: false, message: "Something went wrong. Please try again." })
+  })
+})
+
+describe("removeDiscountCode action", () => {
+  it("removes the code and re-renders the page", async () => {
+    cart.removeDiscountCode.mockResolvedValue(undefined)
+    expect(await removeDiscountCode()).toEqual({ ok: true })
+    expect(cart.removeDiscountCode).toHaveBeenCalledOnce()
+    expect(refresh).toHaveBeenCalledOnce()
+  })
+
+  it("reports a failure generically", async () => {
+    cart.removeDiscountCode.mockRejectedValue(new Error("connection reset"))
+    expect(await removeDiscountCode()).toEqual({ ok: false, message: "Something went wrong. Please try again." })
     expect(refresh).not.toHaveBeenCalled()
   })
 })

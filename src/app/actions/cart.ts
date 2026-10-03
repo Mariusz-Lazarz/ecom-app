@@ -14,6 +14,7 @@ import {
   type UpdateCartItemInput,
   MAX_LINE_QUANTITY,
 } from "@/lib/validation/cart"
+import { DiscountCodeEntrySchema } from "@/lib/validation/discounts"
 
 /**
  * What every cart action resolves to. Actions never throw to the client: a validation problem
@@ -113,4 +114,43 @@ export async function clearCart(): Promise<CartActionResult> {
     await cart.clearCart()
     return { ok: true, itemCount: 0 }
   })
+}
+
+/** What `applyDiscountCode` and `removeDiscountCode` resolve to. */
+export type DiscountActionResult = {
+  ok: boolean
+  // Why the code couldn't be applied (shown under the code field).
+  message?: string
+  // The code as applied (upper-cased).
+  code?: string
+}
+
+/**
+ * Applies a discount code to the signed-in user's cart (checkout's code field). Fails with a
+ * `message` for guests, an empty cart, or a code `checkDiscountCode` rejects; on success the page
+ * re-renders with the code in the cart.
+ */
+export async function applyDiscountCode(code: string): Promise<DiscountActionResult> {
+  const parsed = DiscountCodeEntrySchema.safeParse(code)
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0].message }
+  try {
+    const rule = await cart.applyDiscountCode(parsed.data)
+    refresh()
+    return { ok: true, code: rule.code }
+  } catch (err) {
+    logError(err, "cart.discount.apply")
+    return { ok: false, message: err instanceof AppError && err.status < 500 ? err.message : GENERIC_MESSAGE }
+  }
+}
+
+/** Removes the discount code from the signed-in user's cart. */
+export async function removeDiscountCode(): Promise<DiscountActionResult> {
+  try {
+    await cart.removeDiscountCode()
+    refresh()
+    return { ok: true }
+  } catch (err) {
+    logError(err, "cart.discount.remove")
+    return { ok: false, message: GENERIC_MESSAGE }
+  }
 }

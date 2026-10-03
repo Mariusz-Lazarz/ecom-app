@@ -4,8 +4,10 @@ import { cookies } from "next/headers"
 
 import { auth } from "@/auth"
 import { query, withTransaction } from "@/lib/db"
-import { ConflictError, NotFoundError } from "@/lib/errors"
+import { DiscountCodeError, loadDiscountCode } from "@/lib/discounts"
+import { ConflictError, NotFoundError, UnauthorizedError } from "@/lib/errors"
 import { logger } from "@/lib/logger"
+import { checkDiscountCode, discountProblemMessage, type DiscountRule } from "@/lib/order-rules"
 import type { ProductImage } from "@/lib/products"
 import { mediaUrl } from "@/lib/storage"
 import { MAX_LINE_QUANTITY } from "@/lib/validation/cart"
@@ -21,6 +23,11 @@ import { MAX_LINE_QUANTITY } from "@/lib/validation/cart"
  * Lines hold only product and quantity. Prices, sale state and stock are read live from products,
  * and quantities are clamped to min(stock, 99) whenever they are written. A later stock drop is
  * not written back; `getCart()` flags those lines instead.
+ *
+ * A signed-in user's cart can also hold one discount code (`carts.discount_code`). Guest carts
+ * can't: codes are tied to the customer's redemptions, so they are entered at checkout, which is
+ * signed-in only. `getCart()` re-checks the code on every read and drops it, with a notice, once it
+ * no longer applies.
  *
  * Every function reads the session and cookies, so they only work inside a request (Server
  * Components, Server Actions, Route Handlers). Reading cookies already keeps a render dynamic.
@@ -65,6 +72,10 @@ export type Cart = {
   savingsCents: number
   // The first line's currency, or USD for an empty cart.
   currency: string
+  // The applied discount code, when there is one and it still applies (signed-in carts only).
+  discount?: DiscountRule
+  // Why a previously applied code was just removed from the cart; only on the read that removed it.
+  discountNotice?: string
 }
 
 /** What a write did to one line. */
@@ -114,17 +125,24 @@ async function deleteGuestCookie() {
   if (store.has(CART_COOKIE)) store.delete(CART_COOKIE)
 }
 
-/** The current cart's id, or null when there is none yet. A guest cookie never opens a user's cart. */
-async function findCartId(owner: Owner): Promise<string | null> {
+/** The current cart, or null when there is none yet. A guest cookie never opens a user's cart. */
+async function findCart(owner: Owner): Promise<{ id: string; discountCode: string | null } | null> {
   if ("userId" in owner) {
-    const { rows } = await query<{ id: string }>("SELECT id FROM carts WHERE user_id = $1", [owner.userId])
-    return rows[0]?.id ?? null
+    const { rows } = await query<{ id: string; discount_code: string | null }>(
+      "SELECT id, discount_code FROM carts WHERE user_id = $1",
+      [owner.userId],
+    )
+    return rows[0] ? { id: rows[0].id, discountCode: rows[0].discount_code } : null
   }
   if (!owner.guestCartId) return null
   const { rows } = await query<{ id: string }>("SELECT id FROM carts WHERE id = $1 AND user_id IS NULL", [
     owner.guestCartId,
   ])
-  return rows[0]?.id ?? null
+  return rows[0] ? { id: rows[0].id, discountCode: null } : null
+}
+
+async function findCartId(owner: Owner): Promise<string | null> {
+  return (await findCart(owner))?.id ?? null
 }
 
 /** The current cart's id, creating the cart (and, for a guest, the cookie) if there is none. */
@@ -202,10 +220,15 @@ function toCartItem(row: CartRow): CartItem {
   }
 }
 
-/** The current visitor's cart with live prices and stock. Never creates anything. */
+/**
+ * The current visitor's cart with live prices and stock, and its discount code when it still
+ * applies. Never creates anything; the only write is dropping a code that no longer applies.
+ */
 export async function getCart(): Promise<Cart> {
-  const cartId = await findCartId(await currentOwner())
-  if (!cartId) return EMPTY_CART
+  const owner = await currentOwner()
+  const found = await findCart(owner)
+  if (!found) return EMPTY_CART
+  const cartId = found.id
 
   const { rows } = await query<CartRow>(
     `SELECT ci.product_id, ci.quantity, p.slug, p.name, p.brand, p.price_cents, p.compare_at_cents,
@@ -233,7 +256,22 @@ export async function getCart(): Promise<Cart> {
     if (item.onSale) savingsCents += (item.compareAtCents! - item.priceCents) * item.quantity
   }
 
-  return { items, itemCount, subtotalCents, savingsCents, currency: items[0]?.currency ?? DEFAULT_CURRENCY }
+  const cart: Cart = { items, itemCount, subtotalCents, savingsCents, currency: items[0]?.currency ?? DEFAULT_CURRENCY }
+  if (found.discountCode && "userId" in owner) {
+    const check = checkDiscountCode(await loadDiscountCode(found.discountCode, owner.userId), subtotalCents)
+    if (check.ok) {
+      cart.discount = check.rule
+    } else {
+      // Only if it's still the same code, so a code applied meanwhile isn't dropped.
+      await query("UPDATE carts SET discount_code = NULL WHERE id = $1 AND discount_code = $2", [
+        cartId,
+        found.discountCode,
+      ])
+      cart.discountNotice = `${discountProblemMessage(found.discountCode, check.problem, cart.currency)} We've removed it from your cart.`
+      log.info("Discount code dropped from cart", { cartId, code: found.discountCode, reason: check.problem.reason })
+    }
+  }
+  return cart
 }
 
 /** Sum of quantities in the current cart (0 without one): one query, for the header badge. */
@@ -410,4 +448,39 @@ export async function mergeGuestCart(userId: string): Promise<{ merged: number }
   await deleteGuestCookie()
   if (merged) log.info("Guest cart merged", { userId, merged })
   return { merged }
+}
+
+/**
+ * Applies a discount code to the signed-in user's cart, replacing any code it held, once
+ * `checkDiscountCode` accepts it for the current subtotal. Returns the applied rule.
+ *
+ * @throws UnauthorizedError for guests (codes are entered at checkout, which needs an account).
+ * @throws ConflictError when the cart is empty.
+ * @throws DiscountCodeError when the code is unknown or can't be used (the message says why).
+ */
+export async function applyDiscountCode(code: string): Promise<DiscountRule> {
+  const owner = await currentOwner()
+  if (!("userId" in owner)) throw new UnauthorizedError("Sign in to use a discount code.")
+
+  const cart = await getCart()
+  if (cart.items.length === 0) throw new ConflictError("Your cart is empty.")
+
+  const check = checkDiscountCode(await loadDiscountCode(code, owner.userId), cart.subtotalCents)
+  if (!check.ok) throw new DiscountCodeError(code, check.problem, cart.currency)
+
+  await query("UPDATE carts SET discount_code = $2, updated_at = now() WHERE user_id = $1", [
+    owner.userId,
+    check.rule.code,
+  ])
+  log.info("Discount code applied", { userId: owner.userId, code: check.rule.code })
+  return check.rule
+}
+
+/** Removes the discount code from the signed-in user's cart. A no-op for guests and carts without one. */
+export async function removeDiscountCode(): Promise<void> {
+  const owner = await currentOwner()
+  if (!("userId" in owner)) return
+  await query("UPDATE carts SET discount_code = NULL, updated_at = now() WHERE user_id = $1 AND discount_code IS NOT NULL", [
+    owner.userId,
+  ])
 }
