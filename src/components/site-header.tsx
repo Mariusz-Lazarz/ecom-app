@@ -6,6 +6,7 @@ import { auth } from "@/auth"
 import { CartSheet } from "@/components/cart/cart-sheet"
 import { HeaderSearch } from "@/components/header-search"
 import { MobileNav } from "@/components/mobile-nav"
+import { ThemeToggle } from "@/components/theme/theme-toggle"
 import { buttonVariants } from "@/components/ui/button"
 import { getCartCount } from "@/lib/cart"
 import { navLinks, siteConfig } from "@/lib/data"
@@ -56,6 +57,10 @@ export async function SiteHeader() {
 
         <div className="ml-auto flex items-center gap-1">
           <HeaderSearch />
+          {/* Small screens get the theme switch inside the mobile menu instead. */}
+          <div className="hidden md:block">
+            <ThemeToggle />
+          </div>
           {isAdmin && (
             <Link href="/admin" aria-label="Admin" className={buttonVariants({ variant: "ghost", size: "icon" })}>
               <LayoutDashboard />

@@ -11,7 +11,7 @@ export function OrdersAwaitingAction({ orders }: { orders: AdminOrderSummary[] }
   if (orders.length === 0) {
     return (
       <p className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
-        <CircleCheck className="size-4 text-emerald-600" />
+        <CircleCheck className="size-4 text-emerald-600 dark:text-emerald-400" />
         Nothing is waiting: every order has shipped or been closed.
       </p>
     )

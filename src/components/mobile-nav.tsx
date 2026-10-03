@@ -4,13 +4,15 @@ import Link from "next/link"
 import { useState } from "react"
 import { LayoutDashboard, Menu } from "lucide-react"
 
+import { ThemeSwitcher } from "@/components/theme/theme-toggle"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { navLinks, siteConfig } from "@/lib/data"
 
 /**
- * The slide-out menu on small screens, with an "Admin" link below the store links for admins.
+ * The slide-out menu on small screens, with an "Admin" link below the store links for admins
+ * and a Light / Dark / System switch at the bottom.
  * Choosing a link closes it: a link that only changes the query (e.g. /products →
  * /products?onSale=true) keeps the header mounted, so the menu wouldn't close by itself.
  */
@@ -51,6 +53,10 @@ export function MobileNav({ isAdmin = false }: { isAdmin?: boolean }) {
             </>
           )}
         </nav>
+        <div className="mt-auto flex flex-col gap-2 border-t p-4">
+          <span className="text-xs font-medium text-muted-foreground">Theme</span>
+          <ThemeSwitcher />
+        </div>
       </SheetContent>
     </Sheet>
   )
