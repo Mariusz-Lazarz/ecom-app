@@ -1,13 +1,30 @@
+import { DiscountRow } from "@/components/discounts/discount-row"
 import { formatPrice } from "@/lib/catalogue"
 import type { OrderDetail } from "@/lib/orders"
 
 type OrderTotalsProps = Pick<
   OrderDetail,
-  "subtotalCents" | "savingsCents" | "shippingCents" | "totalCents" | "currency" | "shippingMethod"
+  | "subtotalCents"
+  | "savingsCents"
+  | "discountCode"
+  | "discountCents"
+  | "shippingCents"
+  | "totalCents"
+  | "currency"
+  | "shippingMethod"
 >
 
-/** Subtotal, savings, shipping and total as charged when the order was placed. */
-export function OrderTotals({ subtotalCents, savingsCents, shippingCents, totalCents, currency, shippingMethod }: OrderTotalsProps) {
+/** Subtotal, savings, discount code, shipping and total as charged when the order was placed. */
+export function OrderTotals({
+  subtotalCents,
+  savingsCents,
+  discountCode,
+  discountCents,
+  shippingCents,
+  totalCents,
+  currency,
+  shippingMethod,
+}: OrderTotalsProps) {
   return (
     <dl aria-label="Order totals" className="space-y-2 text-sm">
       <div className="flex justify-between gap-4">
@@ -20,6 +37,7 @@ export function OrderTotals({ subtotalCents, savingsCents, shippingCents, totalC
           <dd className="font-medium tabular-nums">−{formatPrice(savingsCents, currency)}</dd>
         </div>
       )}
+      {discountCode && <DiscountRow code={discountCode} discountCents={discountCents} currency={currency} />}
       <div className="flex justify-between gap-4">
         <dt className="text-muted-foreground">Shipping ({shippingMethod.name})</dt>
         <dd className="font-medium tabular-nums">{shippingCents === 0 ? "Free" : formatPrice(shippingCents, currency)}</dd>

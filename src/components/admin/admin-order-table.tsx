@@ -8,7 +8,8 @@ import type { AdminOrderSummary } from "@/lib/orders"
 
 /**
  * The admin order list as a table (it scrolls sideways inside its container on small screens).
- * The order number links to the order's admin page and its hit area covers the whole row.
+ * The order number links to the order's admin page and its hit area covers the whole row. A
+ * discount code used on the order shows under its total.
  */
 export function AdminOrderTable({ orders }: { orders: AdminOrderSummary[] }) {
   return (
@@ -43,8 +44,14 @@ export function AdminOrderTable({ orders }: { orders: AdminOrderSummary[] }) {
                 <span className="block text-xs text-muted-foreground">{order.customer.email}</span>
               </TableCell>
               <TableCell className="text-right tabular-nums">{order.itemCount}</TableCell>
-              <TableCell className="text-right font-medium tabular-nums">
-                {formatPrice(order.totalCents, order.currency)}
+              <TableCell className="text-right">
+                <span className="block font-medium tabular-nums">{formatPrice(order.totalCents, order.currency)}</span>
+                {order.discountCode && (
+                  <span className="block text-xs text-emerald-600 tabular-nums dark:text-emerald-400">
+                    {order.discountCode}
+                    {order.discountCents > 0 && ` −${formatPrice(order.discountCents, order.currency)}`}
+                  </span>
+                )}
               </TableCell>
               <TableCell className="pr-4">
                 <OrderStatusBadge status={order.status} />

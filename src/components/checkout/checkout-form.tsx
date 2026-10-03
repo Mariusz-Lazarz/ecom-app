@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useActionState, useId, useState } from "react"
-import { CircleAlert, Info, Lock } from "lucide-react"
+import { CircleAlert, Info, Lock, TicketX } from "lucide-react"
 
 import { placeOrder } from "@/app/actions/orders"
 import { CheckoutSummary } from "@/components/checkout/checkout-summary"
@@ -49,9 +49,10 @@ type CheckoutFormProps = {
 
 /**
  * The checkout: address, shipping method and (simulated) payment method on the left, the order
- * summary with the "Place order" button on the right (below the form on mobile). Posts to the
- * `placeOrder` Server Action, which redirects to the order page on success or returns field
- * errors / a form-level message, shown inline with the values kept.
+ * summary with the discount code field and the "Place order" button on the right (below the form
+ * on mobile). The totals include the cart's discount code. Posts to the `placeOrder` Server
+ * Action, which redirects to the order page on success or returns field errors / a form-level
+ * message, shown inline with the values kept.
  */
 export function CheckoutForm({ cart, defaults }: CheckoutFormProps) {
   const [state, action, pending] = useActionState<CheckoutFormState, FormData>(placeOrder, undefined)
@@ -82,7 +83,8 @@ function CheckoutFields({
       : DEFAULT_SHIPPING_METHOD_ID,
   )
   const errors = state?.errors
-  const quote = quoteCheckout(cart, shippingMethodId)
+  const discount = cart.discount ?? null
+  const quote = quoteCheckout(cart, shippingMethodId, discount)
   const blocker = checkoutBlocker(cart)
 
   return (
@@ -104,7 +106,7 @@ function CheckoutFields({
               aria-invalid={errors?.shippingMethodId ? true : undefined}
             >
               {shippingMethods.map((method) => {
-                const methodQuote = quoteCheckout(cart, method.id)
+                const methodQuote = quoteCheckout(cart, method.id, discount)
                 const id = `shipping-${method.id}`
                 return (
                   <FieldLabel key={method.id} htmlFor={id}>
@@ -124,7 +126,7 @@ function CheckoutFields({
                         </FieldDescription>
                       </FieldContent>
                       <span className="shrink-0 text-right text-sm font-semibold tabular-nums">
-                        {methodQuote.freeShipping && (
+                        {(methodQuote.freeShipping || methodQuote.shippingDiscountCents > 0) && (
                           <span className="mr-1.5 font-normal text-muted-foreground line-through">
                             {formatPrice(methodQuote.shippingMethodPriceCents, cart.currency)}
                           </span>
@@ -192,6 +194,14 @@ function CheckoutFields({
         </CardHeader>
         <CardContent className="space-y-4">
           <CheckoutSummary cart={cart} quote={quote} />
+
+          {cart.discountNotice && (
+            <Alert role="status">
+              <TicketX />
+              <AlertTitle>Discount code removed</AlertTitle>
+              <AlertDescription>{cart.discountNotice}</AlertDescription>
+            </Alert>
+          )}
 
           {blocker && (
             <Alert variant="destructive">

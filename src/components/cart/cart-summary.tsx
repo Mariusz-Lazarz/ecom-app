@@ -2,18 +2,27 @@
 
 import Link from "next/link"
 import { useId } from "react"
-import { ArrowRight, ShoppingCart, Truck } from "lucide-react"
+import { ArrowRight, ShoppingCart, TicketX, Truck } from "lucide-react"
 
+import { DiscountRow } from "@/components/discounts/discount-row"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import type { Cart } from "@/lib/cart"
 import { checkoutBlocker, freeShippingProgress } from "@/lib/cart-state"
 import { formatPrice } from "@/lib/catalogue"
+import { discountOnSubtotal } from "@/lib/order-rules"
 
-/** Subtotal, savings and shipping rows, followed by the progress towards free shipping. */
+/**
+ * Subtotal, savings, discount code and shipping rows, followed by the progress towards free
+ * shipping (left out when a free-shipping code applies). Codes are entered at checkout; here an applied one only shows what it takes off (and
+ * drops out while the subtotal is below its minimum), and a code the cart just lost explains why.
+ */
 export function CartTotals({ cart }: { cart: Cart }) {
   const shipping = freeShippingProgress(cart.subtotalCents)
   const excluded = cart.items.some((item) => !item.available)
+  const discount = cart.discount && cart.subtotalCents >= cart.discount.minSubtotalCents ? cart.discount : null
+  const freeShippingCode = discount?.type === "free_shipping"
 
   return (
     <div className="space-y-4">
@@ -28,15 +37,31 @@ export function CartTotals({ cart }: { cart: Cart }) {
             <dd className="font-medium tabular-nums">−{formatPrice(cart.savingsCents, cart.currency)}</dd>
           </div>
         )}
+        {discount && (
+          <DiscountRow
+            code={discount.code}
+            discountCents={discountOnSubtotal(discount, cart.subtotalCents)}
+            currency={cart.currency}
+          />
+        )}
         <div className="flex justify-between gap-4">
           <dt className="text-muted-foreground">Shipping</dt>
-          <dd className="font-medium">{shipping.unlocked ? "Free" : "Calculated at checkout"}</dd>
+          <dd className="font-medium">{shipping.unlocked || freeShippingCode ? "Free" : "Calculated at checkout"}</dd>
         </div>
       </dl>
+      {cart.discountNotice && (
+        <Alert role="status">
+          <TicketX />
+          <AlertDescription>{cart.discountNotice}</AlertDescription>
+        </Alert>
+      )}
+      {!cart.discount && !cart.discountNotice && (
+        <p className="text-xs text-muted-foreground">Have a discount code? Add it at checkout.</p>
+      )}
       {excluded && (
         <p className="text-xs text-muted-foreground">Out-of-stock items aren&apos;t included in the total.</p>
       )}
-      <FreeShippingProgress subtotalCents={cart.subtotalCents} currency={cart.currency} />
+      {!freeShippingCode && <FreeShippingProgress subtotalCents={cart.subtotalCents} currency={cart.currency} />}
     </div>
   )
 }

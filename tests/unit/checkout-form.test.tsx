@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import type { DiscountActionResult } from "@/app/actions/cart"
 import type { CheckoutFormState, CheckoutValues } from "@/lib/validation/checkout"
 
 import { makeCart, makeCartItem } from "./fixtures/cart"
@@ -10,6 +11,16 @@ const placeOrder = vi.fn<(state: CheckoutFormState, formData: FormData) => Promi
 vi.mock("@/app/actions/orders", () => ({
   placeOrder: (state: CheckoutFormState, formData: FormData) => placeOrder(state, formData),
 }))
+
+const applyDiscountCode = vi.fn<(code: string) => Promise<DiscountActionResult>>()
+const removeDiscountCode = vi.fn<() => Promise<DiscountActionResult>>()
+vi.mock("@/app/actions/cart", () => ({
+  applyDiscountCode: (code: string) => applyDiscountCode(code),
+  removeDiscountCode: () => removeDiscountCode(),
+}))
+
+const notify = { success: vi.fn(), error: vi.fn() }
+vi.mock("@/lib/notify", () => ({ notify }))
 
 const { CheckoutForm } = await import("@/components/checkout/checkout-form")
 
@@ -36,6 +47,10 @@ function deferred<T>() {
 
 beforeEach(() => {
   placeOrder.mockReset()
+  applyDiscountCode.mockReset()
+  removeDiscountCode.mockReset()
+  notify.success.mockReset()
+  notify.error.mockReset()
 })
 
 describe("CheckoutForm", () => {
@@ -206,5 +221,125 @@ describe("CheckoutForm", () => {
     expect(submit()).toBeDisabled()
     expect(screen.getByText("Reduce the quantities to what's in stock to check out.")).toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Review your cart" })).toHaveAttribute("href", "/cart")
+  })
+})
+
+describe("CheckoutForm discount code", () => {
+  const welcome = { code: "WELCOME10", type: "percent", value: 10, minSubtotalCents: 3000 } as const
+  const codeInput = () => screen.getByLabelText("Discount code")
+  const applyButton = () => screen.getByRole("button", { name: "Apply" })
+
+  it("shows an empty code field and no discount line without a code", () => {
+    render(<CheckoutForm cart={makeCart([makeCartItem({ priceCents: 4000 })])} defaults={filled} />)
+
+    expect(codeInput()).toHaveValue("")
+    expect(applyButton()).toBeDisabled()
+    expect(within(totals()).queryByText(/^Discount/)).not.toBeInTheDocument()
+  })
+
+  it("applies the typed code through the cart action and confirms it", async () => {
+    const user = userEvent.setup()
+    applyDiscountCode.mockResolvedValue({ ok: true, code: "WELCOME10" })
+    render(<CheckoutForm cart={makeCart([makeCartItem({ priceCents: 4000 })])} defaults={filled} />)
+
+    await user.type(codeInput(), "welcome10")
+    await user.click(applyButton())
+
+    expect(applyDiscountCode).toHaveBeenCalledExactlyOnceWith("welcome10")
+    await waitFor(() => expect(notify.success).toHaveBeenCalledWith("WELCOME10 applied"))
+    expect(codeInput()).toHaveValue("")
+    expect(placeOrder).not.toHaveBeenCalled()
+  })
+
+  it("applies on Enter instead of placing the order", async () => {
+    const user = userEvent.setup()
+    applyDiscountCode.mockResolvedValue({ ok: true, code: "FREESHIP" })
+    render(<CheckoutForm cart={makeCart([makeCartItem()])} defaults={filled} />)
+
+    await user.type(codeInput(), "FREESHIP{Enter}")
+
+    await waitFor(() => expect(applyDiscountCode).toHaveBeenCalledExactlyOnceWith("FREESHIP"))
+    expect(placeOrder).not.toHaveBeenCalled()
+  })
+
+  it("shows why a code was refused under the field, and clears it on edit", async () => {
+    const user = userEvent.setup()
+    applyDiscountCode.mockResolvedValue({ ok: false, message: "EXPIRED5 has expired." })
+    render(<CheckoutForm cart={makeCart([makeCartItem()])} defaults={filled} />)
+
+    await user.type(codeInput(), "EXPIRED5")
+    await user.click(applyButton())
+
+    expect(await screen.findByText("EXPIRED5 has expired.")).toBeInTheDocument()
+    expect(codeInput()).toHaveAttribute("aria-invalid", "true")
+    expect(codeInput()).toHaveAccessibleDescription("EXPIRED5 has expired.")
+    expect(codeInput()).toHaveValue("EXPIRED5")
+    expect(notify.success).not.toHaveBeenCalled()
+
+    await user.type(codeInput(), "X")
+    expect(screen.queryByText("EXPIRED5 has expired.")).not.toBeInTheDocument()
+    expect(codeInput()).not.toHaveAttribute("aria-invalid")
+  })
+
+  it("doesn't post the code field with the order", async () => {
+    const user = userEvent.setup()
+    placeOrder.mockResolvedValue({ message: "Your cart is empty.", values: {} })
+    render(<CheckoutForm cart={makeCart([makeCartItem()])} defaults={filled} />)
+
+    await user.type(codeInput(), "TYPED")
+    await user.click(submit())
+
+    await waitFor(() => expect(placeOrder).toHaveBeenCalledOnce())
+    expect([...placeOrder.mock.calls[0][1].values()]).not.toContain("TYPED")
+  })
+
+  it("takes an applied percent code off the total and shows it in place of the field", async () => {
+    const user = userEvent.setup()
+    removeDiscountCode.mockResolvedValue({ ok: true })
+    const cart = { ...makeCart([makeCartItem({ priceCents: 4000 })]), discount: welcome }
+    render(<CheckoutForm cart={cart} defaults={filled} />)
+
+    expect(row("Discount (WELCOME10)")).toHaveTextContent("−$4.00")
+    expect(row("Shipping (Standard)")).toHaveTextContent("$5.99")
+    expect(row("Total")).toHaveTextContent("$41.99")
+    expect(submit()).toHaveTextContent("Place order · $41.99")
+    expect(screen.queryByLabelText("Discount code")).not.toBeInTheDocument()
+    expect(screen.getByText("WELCOME10")).toBeInTheDocument()
+    expect(screen.getByText("· 10% off")).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Remove discount code WELCOME10" }))
+    expect(removeDiscountCode).toHaveBeenCalledOnce()
+  })
+
+  it("makes every method free with a free-shipping code, showing the waived prices", async () => {
+    const user = userEvent.setup()
+    const cart = {
+      ...makeCart([makeCartItem({ priceCents: 1000 })]),
+      discount: { code: "FREESHIP", type: "free_shipping", value: 0, minSubtotalCents: 0 } as const,
+    }
+    render(<CheckoutForm cart={cart} defaults={filled} />)
+
+    expect(row("Discount (FREESHIP)")).toHaveTextContent("Free shipping")
+    expect(row("Shipping (Standard)")).toHaveTextContent("Free")
+    expect(row("Total")).toHaveTextContent("$10.00")
+    const express = shippingOption(/^Express/).closest("label")!
+    expect(within(express).getByText("$12.99")).toHaveClass("line-through")
+
+    await user.click(shippingOption(/^Next day/))
+    expect(row("Shipping (Next day)")).toHaveTextContent("Free")
+    expect(row("Total")).toHaveTextContent("$10.00")
+  })
+
+  it("explains a code the cart just dropped", () => {
+    const cart = {
+      ...makeCart([makeCartItem({ priceCents: 1000 })]),
+      discountNotice: "WELCOME10 needs a subtotal of at least $30.00. Add $20.00 more to use it. We've removed it from your cart.",
+    }
+    render(<CheckoutForm cart={cart} defaults={filled} />)
+
+    const notice = screen.getByRole("status")
+    expect(notice).toHaveTextContent("Discount code removed")
+    expect(notice).toHaveTextContent("Add $20.00 more to use it.")
+    expect(row("Total")).toHaveTextContent("$15.99")
   })
 })
