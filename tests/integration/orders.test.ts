@@ -388,6 +388,40 @@ describe("reading orders", () => {
   })
 })
 
+describe("getLatestShippingAddress", () => {
+  it("returns null for a user without orders", async () => {
+    const user = await makeUser()
+    expect(await orders.getLatestShippingAddress(user.id)).toBeNull()
+  })
+
+  it("returns the address of the user's most recent order only", async () => {
+    const { user, number: first } = await pendingOrder()
+    const other = await makeUser()
+    const product = await makeProduct()
+    await fillCart(other.id, [[product.id, 1]])
+    await orders.placeOrder(other.id, checkout({ fullName: "Someone Else", city: "Paris", country: "FR" }))
+
+    await fillCart(user.id, [[product.id, 1]])
+    const { number: second } = await orders.placeOrder(
+      user.id,
+      checkout({ line1: "1 New Street", line2: "Flat 2", city: "Dublin", country: "IE", postalCode: "d02 x285" }),
+    )
+    // Same-second orders are ordered by number as a tiebreak; force the first to be older anyway.
+    await query("UPDATE orders SET created_at = created_at - interval '1 day' WHERE number = $1", [first])
+
+    expect(second).not.toBe(first)
+    expect(await orders.getLatestShippingAddress(user.id)).toEqual({
+      fullName: "Ada Lovelace",
+      line1: "1 New Street",
+      line2: "Flat 2",
+      city: "Dublin",
+      postalCode: "D02 X285",
+      country: "IE",
+      phone: "+44 20 7946 0958",
+    })
+  })
+})
+
 describe("cancelOrderAsCustomer", () => {
   it("cancels a pending order, restocks it and records the customer", async () => {
     const { user, product, number } = await pendingOrder({ quantity: 3, productStock: 5 })

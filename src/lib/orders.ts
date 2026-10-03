@@ -554,6 +554,36 @@ export async function getOrderForUser(userId: string, number: string): Promise<O
   return findOrder(number, userId)
 }
 
+/** The shipping address of the user's most recent order, to prefill the checkout; null without orders. */
+export async function getLatestShippingAddress(userId: string): Promise<OrderAddress | null> {
+  const { rows } = await query<{
+    full_name: string
+    line1: string
+    line2: string | null
+    city: string
+    postal_code: string
+    country: string
+    phone: string
+  }>(
+    `SELECT full_name, line1, line2, city, postal_code, country, phone FROM orders
+     WHERE user_id = $1
+     ORDER BY created_at DESC, number DESC
+     LIMIT 1`,
+    [userId],
+  )
+  const row = rows[0]
+  if (!row) return null
+  return {
+    fullName: row.full_name,
+    line1: row.line1,
+    line2: row.line2,
+    city: row.city,
+    postalCode: row.postal_code,
+    country: row.country,
+    phone: row.phone,
+  }
+}
+
 /** Any order by number (admin view, with the actors' user ids), or null. */
 export async function getOrder(number: string): Promise<OrderDetail | null> {
   return findOrder(number, null)
