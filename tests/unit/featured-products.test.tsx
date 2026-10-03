@@ -6,8 +6,12 @@ import { makeProduct } from "./fixtures/products"
 vi.mock("server-only", () => ({}))
 // Product cards import the cart Server Actions, which outside Next.js would pull in the cart module.
 vi.mock("@/app/actions/cart", () => ({ addToCart: vi.fn() }))
+vi.mock("@/app/actions/wishlist", () => ({ toggleWishlistItem: vi.fn() }))
 const listProducts = vi.fn()
 vi.mock("@/lib/products", () => ({ listProducts }))
+const getWishlistedIds = vi.fn()
+vi.mock("@/lib/wishlist", () => ({ getWishlistedIds }))
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }))
 
 const { FeaturedProducts, FEATURED_LIMIT } = await import("@/components/home/featured-products")
 
@@ -18,6 +22,7 @@ const products = [makeProduct({ name: "Aria" }), makeProduct({ name: "Pulse" }),
 
 beforeEach(() => {
   listProducts.mockReset().mockResolvedValue({ items: products, page: 1, pageSize: 8, total: 3, pageCount: 1 })
+  getWishlistedIds.mockReset().mockResolvedValue(null)
 })
 
 describe("FeaturedProducts", () => {
@@ -51,5 +56,25 @@ describe("FeaturedProducts", () => {
 
     expect(container.querySelectorAll('[data-slot="card"]')).toHaveLength(0)
     expect(screen.getByRole("heading", { name: "Featured products" })).toBeInTheDocument()
+  })
+
+  it("looks up the saved products for all cards in one batch and marks their hearts", async () => {
+    getWishlistedIds.mockResolvedValue(new Set([products[1].id]))
+    await renderSection()
+
+    expect(getWishlistedIds).toHaveBeenCalledExactlyOnceWith(products.map((product) => product.id))
+    expect(screen.getByRole("button", { name: "Save Aria to wishlist" })).toHaveAttribute("aria-pressed", "false")
+    expect(screen.getByRole("button", { name: "Remove Pulse from wishlist" })).toHaveAttribute("aria-pressed", "true")
+    expect(screen.getByRole("button", { name: "Save Tern to wishlist" })).toHaveAttribute("aria-pressed", "false")
+  })
+
+  it("shows unpressed hearts to guests", async () => {
+    await renderSection()
+
+    expect(screen.getAllByRole("button", { name: /to wishlist$/ }).map((b) => b.getAttribute("aria-pressed"))).toEqual([
+      "false",
+      "false",
+      "false",
+    ])
   })
 })

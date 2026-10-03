@@ -7,16 +7,21 @@ import { Price } from "@/components/products/price"
 import { Rating } from "@/components/products/rating"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
+import { WishlistButton } from "@/components/wishlist/wishlist-button"
 import type { ProductSummary } from "@/lib/products"
 import { cn } from "@/lib/utils"
+import type { WishlistIds } from "@/lib/wishlist"
 
 type ProductCardProps = {
   product: ProductSummary
   // Set on cards above the fold so their photo isn't lazy-loaded.
   eager?: boolean
+  // The visitor's saved products on this list (from `getWishlistedIds`), which adds a heart over
+  // the photo: null for a guest, whose heart leads to /login. Without it the card has no heart.
+  wishlist?: WishlistIds
 }
 
-export function ProductCard({ product, eager = false }: ProductCardProps) {
+export function ProductCard({ product, eager = false, wishlist }: ProductCardProps) {
   const href = `/products/${product.slug}`
   return (
     <Card className="group relative gap-0 py-0">
@@ -49,6 +54,15 @@ export function ProductCard({ product, eager = false }: ProductCardProps) {
         {product.badge && <Badge>{product.badge}</Badge>}
         {!product.inStock && <Badge variant="secondary">Out of stock</Badge>}
       </div>
+      {wishlist !== undefined && (
+        <WishlistButton
+          productId={product.id}
+          productName={product.name}
+          saved={wishlist?.has(product.id) ?? false}
+          signedIn={wishlist !== null}
+          className="absolute top-3 right-3"
+        />
+      )}
       <CardContent className="flex flex-1 flex-col gap-2 py-4">
         <p className="text-xs text-muted-foreground">{product.brand}</p>
         <Link href={href} className="font-medium hover:underline">

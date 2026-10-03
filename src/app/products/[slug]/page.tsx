@@ -15,9 +15,11 @@ import { SiteFooter } from "@/components/site-footer"
 import { SiteHeader } from "@/components/site-header"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { WishlistButton } from "@/components/wishlist/wishlist-button"
 import { getProductBySlug } from "@/lib/products"
 import { parseProductReviewQuery, REVIEWS_ANCHOR } from "@/lib/review-utils"
 import { shippingRules } from "@/lib/shipping"
+import { getWishlistedIds } from "@/lib/wishlist"
 
 // generateMetadata and the page both need the product; cache() makes that one query per request.
 const loadProduct = cache(getProductBySlug)
@@ -35,6 +37,8 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
   const product = await loadProduct((await params).slug)
   if (!product) notFound()
   const reviewQuery = parseProductReviewQuery(await searchParams)
+  // One query marks the hearts on this product and on the related ones.
+  const wishlist = await getWishlistedIds([product.id, ...product.related.map((related) => related.id)])
 
   return (
     <>
@@ -92,13 +96,24 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
 
             <StockStatus stock={product.stock} />
 
-            <AddToCartButton
-              productId={product.id}
-              productName={product.name}
-              inStock={product.inStock}
-              stock={product.stock}
-              variant="full"
-            />
+            <div className="flex items-start gap-3">
+              <div className="min-w-0 flex-1 sm:flex-none">
+                <AddToCartButton
+                  productId={product.id}
+                  productName={product.name}
+                  inStock={product.inStock}
+                  stock={product.stock}
+                  variant="full"
+                />
+              </div>
+              <WishlistButton
+                productId={product.id}
+                productName={product.name}
+                saved={wishlist?.has(product.id) ?? false}
+                signedIn={wishlist !== null}
+                variant="full"
+              />
+            </div>
 
             <ul className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
               <li className="flex items-center gap-2">
@@ -153,7 +168,7 @@ export default async function ProductPage({ params, searchParams }: PageProps<"/
             <ul className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
               {product.related.map((related) => (
                 <li key={related.id} className="grid">
-                  <ProductCard product={related} />
+                  <ProductCard product={related} wishlist={wishlist} />
                 </li>
               ))}
             </ul>
