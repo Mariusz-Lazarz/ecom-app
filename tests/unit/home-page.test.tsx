@@ -7,6 +7,10 @@ vi.mock("@/components/site-header", () => ({ SiteHeader: () => <header /> }))
 vi.mock("@/components/home/categories-section", () => ({
   CategoriesSection: () => <section><h2>Shop by category</h2></section>,
 }))
+// FeaturedProducts is an async Server Component (reads the database) and has its own tests.
+vi.mock("@/components/home/featured-products", () => ({
+  FeaturedProducts: () => <section><h2>Featured products</h2></section>,
+}))
 
 const { default: Home } = await import("@/app/page")
 

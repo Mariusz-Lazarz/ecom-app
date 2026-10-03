@@ -13,15 +13,7 @@ const nextConfig: NextConfig = {
     browserToTerminal: true,
   },
   images: {
-    remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "images.unsplash.com",
-        pathname: "/photo-*",
-        search: "?w=600&q=80&auto=format&fit=crop",
-      },
-      ...(mediaPublicUrl ? [new URL(`${mediaPublicUrl.href.replace(/\/+$/, "")}/**`)] : []),
-    ],
+    remotePatterns: mediaPublicUrl ? [new URL(`${mediaPublicUrl.href.replace(/\/+$/, "")}/**`)] : [],
     // Media objects are content-addressed and never change, so optimised variants can be cached for a long time.
     minimumCacheTTL: 2_678_400, // 31 days
     // The optimiser refuses local IPs by default (SSRF guard). Only lift that for the local S3 emulator.

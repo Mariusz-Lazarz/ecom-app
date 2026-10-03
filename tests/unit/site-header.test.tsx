@@ -6,12 +6,20 @@ const auth = vi.fn()
 
 vi.mock("@/auth", () => ({ auth: () => auth() }))
 
+const location = { pathname: "/", search: "" }
+vi.mock("next/navigation", () => ({
+  usePathname: () => location.pathname,
+  useSearchParams: () => new URLSearchParams(location.search),
+}))
+
 const { SiteHeader } = await import("@/components/site-header")
 const { navLinks, siteConfig } = await import("@/lib/data")
 
 describe("SiteHeader", () => {
   beforeEach(() => {
     auth.mockReset().mockResolvedValue(null)
+    location.pathname = "/"
+    location.search = ""
   })
 
   it("renders inside the page banner with the promo message", async () => {
@@ -55,11 +63,67 @@ describe("SiteHeader", () => {
     expect(screen.getByRole("link", { name: "Account" })).toHaveAttribute("href", "/account")
   })
 
-  it("exposes search as a real button rather than a link", async () => {
+  it("exposes search as a collapsed toggle button rather than a link", async () => {
     render(await SiteHeader())
 
-    expect(screen.getByRole("button", { name: "Search" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Search" })).toHaveAttribute("aria-expanded", "false")
     expect(screen.queryByRole("link", { name: "Search" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("search")).not.toBeInTheDocument()
+  })
+
+  it("opens a search form that submits a GET to /products with the term as q", async () => {
+    const user = userEvent.setup()
+    render(await SiteHeader())
+
+    await user.click(screen.getByRole("button", { name: "Search" }))
+
+    expect(screen.getByRole("button", { name: "Search" })).toHaveAttribute("aria-expanded", "true")
+    const form = screen.getByRole("search")
+    expect(form).toHaveAttribute("action", "/products")
+    expect(form.getAttribute("method") ?? "get").toMatch(/^get$/i)
+    const input = within(form).getByRole("searchbox", { name: "Search products" })
+    expect(input).toHaveAttribute("name", "q")
+    expect(input).toHaveValue("")
+    expect(input).toHaveFocus()
+    // Away from /products, a search starts from an unfiltered catalogue.
+    expect(form.querySelectorAll('input[type="hidden"]')).toHaveLength(0)
+  })
+
+  it("keeps the current filters and term when searching from /products", async () => {
+    location.pathname = "/products"
+    location.search = "q=boots&category=footwear&sort=price-asc&onSale=true&page=3"
+    const user = userEvent.setup()
+    render(await SiteHeader())
+
+    await user.click(screen.getByRole("button", { name: "Search" }))
+
+    const form = screen.getByRole("search")
+    expect(within(form).getByRole("searchbox")).toHaveValue("boots")
+    const hidden = [...form.querySelectorAll<HTMLInputElement>('input[type="hidden"]')].map((i) => [i.name, i.value])
+    // The page is dropped: a new search starts on page 1.
+    expect(hidden).toEqual([
+      ["category", "footwear"],
+      ["sort", "price-asc"],
+      ["onSale", "true"],
+    ])
+  })
+
+  it("closes the search with its close button, the toggle, and Escape", async () => {
+    const user = userEvent.setup()
+    render(await SiteHeader())
+    const toggle = screen.getByRole("button", { name: "Search" })
+
+    await user.click(toggle)
+    await user.click(screen.getByRole("button", { name: "Close search" }))
+    expect(screen.queryByRole("search")).not.toBeInTheDocument()
+
+    await user.click(toggle)
+    await user.click(toggle)
+    expect(screen.queryByRole("search")).not.toBeInTheDocument()
+
+    await user.click(toggle)
+    await user.keyboard("{Escape}")
+    expect(screen.queryByRole("search")).not.toBeInTheDocument()
   })
 
   it("opens a mobile menu dialog listing all navigation links", async () => {
@@ -74,6 +138,17 @@ describe("SiteHeader", () => {
     const mobileLinks = within(dialog).getAllByRole("link")
     expect(mobileLinks.map((link) => link.getAttribute("href"))).toEqual(navLinks.map((l) => l.href))
     expect(mobileLinks.map((link) => link.textContent)).toEqual(navLinks.map((l) => l.label))
+  })
+
+  it("closes the mobile menu when a link is chosen", async () => {
+    const user = userEvent.setup()
+    render(await SiteHeader())
+
+    await user.click(screen.getByRole("button", { name: "Open menu" }))
+    const dialog = await screen.findByRole("dialog")
+    await user.click(within(dialog).getByRole("link", { name: "Deals" }))
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
   })
 
   it("closes the mobile menu with the close button and with Escape", async () => {

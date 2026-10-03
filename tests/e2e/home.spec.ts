@@ -1,12 +1,23 @@
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test"
 
-import { featuredProducts, navLinks, siteConfig } from "../../src/lib/data"
+import { navLinks, siteConfig } from "../../src/lib/data"
+
+type FeaturedProduct = { slug: string; name: string; image: { alt: string } | null }
+
+// The home page shows the first page of featured products from the seeded catalogue.
+async function getFeaturedProducts(request: APIRequestContext) {
+  const res = await request.get("/api/products?featured=true&pageSize=8")
+  expect(res.status()).toBe(200)
+  const { items } = (await res.json()) as { items: FeaturedProduct[] }
+  expect(items.length).toBeGreaterThan(0)
+  return items
+}
 
 const animations = ["hero-shopping", "secure-payment", "delivery", "gift"]
 
 const isMobile = (page: Page) => (page.viewportSize()?.width ?? 0) < 768
 
-// Don't use "networkidle": while /products etc. don't exist yet, Next's router leaves the 404
+// Don't use "networkidle": while /about, /cart etc. don't exist yet, Next's router leaves the 404
 // prefetch responses open, so the network never goes idle. Wait for what the page actually needs.
 async function waitForMedia(page: Page) {
   await page.waitForLoadState("load")
@@ -21,7 +32,7 @@ test.describe("home page", () => {
     page.on("console", (msg) => {
       if (msg.type() !== "error") return
       const source = msg.location().url
-      // Linked pages like /products aren't built yet, so Next's route prefetches 404. Any other failure counts.
+      // Linked pages like /about and /cart aren't built yet, so Next's route prefetches 404. Any other failure counts.
       const isPendingRoutePrefetch = msg.text().includes("404") && new URL(source).searchParams.has("_rsc")
       if (!isPendingRoutePrefetch) errors.push(`${msg.text()} (${source})`)
     })
@@ -49,7 +60,8 @@ test.describe("home page", () => {
     ])
   })
 
-  test("serves every product photo through the image optimiser", async ({ page }) => {
+  test("serves every product photo through the image optimiser", async ({ page, request }) => {
+    const featuredProducts = await getFeaturedProducts(request)
     const imageResponses: { url: string; status: number }[] = []
     page.on("response", (res) => {
       if (res.url().includes("/_next/image")) imageResponses.push({ url: res.url(), status: res.status() })
@@ -58,7 +70,7 @@ test.describe("home page", () => {
     await page.goto("/")
 
     for (const product of featuredProducts) {
-      const image = page.getByAltText(product.name)
+      const image = page.getByAltText(product.image!.alt, { exact: true })
       await image.scrollIntoViewIfNeeded()
       // naturalWidth is 0 when the optimiser rejects the URL (e.g. remotePatterns mismatch)
       await expect
@@ -70,7 +82,8 @@ test.describe("home page", () => {
     expect(imageResponses.filter((r) => r.status !== 200)).toEqual([])
   })
 
-  test("loads nothing from third-party hosts except via our image optimiser", async ({ page, baseURL }) => {
+  test("loads nothing from third-party hosts except via our image optimiser", async ({ page, baseURL, request }) => {
+    const featuredProducts = await getFeaturedProducts(request)
     const externalRequests: string[] = []
     page.on("request", (req) => {
       if (new URL(req.url()).origin !== new URL(baseURL!).origin) externalRequests.push(req.url())
@@ -79,7 +92,9 @@ test.describe("home page", () => {
     await page.goto("/")
     await waitForMedia(page)
     // Scroll through the page so lazy photos and every animation's renderer get requested
-    for (const product of featuredProducts) await page.getByAltText(product.name).scrollIntoViewIfNeeded()
+    for (const product of featuredProducts) {
+      await page.getByAltText(product.image!.alt, { exact: true }).scrollIntoViewIfNeeded()
+    }
     await page.getByRole("img", { name: /gift box/i }).scrollIntoViewIfNeeded()
     await page.waitForTimeout(1_000)
 
@@ -138,6 +153,7 @@ test.describe("home page", () => {
   })
 
   test("links every category tile and product card to its page", async ({ page, request }) => {
+    const featuredProducts = await getFeaturedProducts(request)
     const { categories } = (await (await request.get("/api/categories")).json()) as {
       categories: { slug: string; name: string }[]
     }
@@ -193,7 +209,8 @@ test.describe("home page", () => {
     expect(new URL(page.url()).search).toBe("")
   })
 
-  test("lets keyboard users reach each product once", async ({ page }) => {
+  test("lets keyboard users reach each product once", async ({ page, request }) => {
+    const featuredProducts = await getFeaturedProducts(request)
     await page.goto("/")
 
     // Walk the whole tab order once; stop when focus wraps back to an element we've already visited.
