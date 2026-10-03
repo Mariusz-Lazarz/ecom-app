@@ -2,12 +2,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const signIn = vi.fn()
 const flash = vi.fn()
+const findUserByEmail = vi.fn()
+const mergeGuestCart = vi.fn()
 const redirect = vi.fn((url: string) => {
   throw Object.assign(new Error("NEXT_REDIRECT"), { digest: `NEXT_REDIRECT;replace;${url};307;` })
 })
 
 vi.mock("@/auth", () => ({ signIn: (...args: unknown[]) => signIn(...args) }))
 vi.mock("@/lib/flash", () => ({ flash: (...args: unknown[]) => flash(...args) }))
+vi.mock("@/lib/users", () => ({ findUserByEmail: (...args: unknown[]) => findUserByEmail(...args) }))
+vi.mock("@/lib/cart", () => ({ mergeGuestCart: (...args: unknown[]) => mergeGuestCart(...args) }))
 vi.mock("next/navigation", () => ({ redirect: (url: string) => redirect(url) }))
 vi.mock("next-auth", () => {
   class AuthError extends Error {
@@ -34,6 +38,8 @@ describe("login action", () => {
     signIn.mockReset()
     flash.mockReset()
     redirect.mockClear()
+    findUserByEmail.mockReset().mockResolvedValue({ id: "user-1", email: "jan@example.com" })
+    mergeGuestCart.mockReset().mockResolvedValue({ merged: 2 })
   })
 
   it("signs in with a normalized email, queues a welcome toast and redirects home", async () => {
@@ -55,11 +61,45 @@ describe("login action", () => {
     expect(flash.mock.invocationCallOrder[0]).toBeLessThan(redirect.mock.invocationCallOrder[0])
   })
 
+  it("merges the guest cart into the signed-in user's cart before redirecting", async () => {
+    signIn.mockResolvedValue("http://localhost/")
+
+    await expect(login(undefined, form())).rejects.toMatchObject({ digest: "NEXT_REDIRECT;replace;/;307;" })
+    expect(findUserByEmail).toHaveBeenCalledExactlyOnceWith("jan@example.com")
+    expect(mergeGuestCart).toHaveBeenCalledExactlyOnceWith("user-1")
+    expect(signIn.mock.invocationCallOrder[0]).toBeLessThan(mergeGuestCart.mock.invocationCallOrder[0])
+    expect(mergeGuestCart.mock.invocationCallOrder[0]).toBeLessThan(redirect.mock.invocationCallOrder[0])
+  })
+
+  it("still signs in, toasts and redirects when the cart merge fails", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {})
+    signIn.mockResolvedValue("http://localhost/")
+    mergeGuestCart.mockRejectedValue(new Error("db down"))
+
+    await expect(login(undefined, form())).rejects.toMatchObject({ digest: "NEXT_REDIRECT;replace;/;307;" })
+    expect(mergeGuestCart).toHaveBeenCalledOnce()
+    expect(flash).toHaveBeenCalledOnce()
+    expect(redirect).toHaveBeenCalledExactlyOnceWith("/")
+    expect(error).toHaveBeenCalled()
+    error.mockRestore()
+  })
+
+  it("still signs in when looking the user up for the merge fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    signIn.mockResolvedValue("http://localhost/")
+    findUserByEmail.mockRejectedValue(new Error("db down"))
+
+    await expect(login(undefined, form())).rejects.toMatchObject({ digest: "NEXT_REDIRECT;replace;/;307;" })
+    expect(mergeGuestCart).not.toHaveBeenCalled()
+    expect(redirect).toHaveBeenCalledExactlyOnceWith("/")
+  })
+
   it("rethrows unexpected errors without a toast or redirect", async () => {
     const boom = new Error("boom")
     signIn.mockRejectedValue(boom)
 
     await expect(login(undefined, form())).rejects.toBe(boom)
+    expect(mergeGuestCart).not.toHaveBeenCalled()
     expect(flash).not.toHaveBeenCalled()
     expect(redirect).not.toHaveBeenCalled()
   })
@@ -67,6 +107,7 @@ describe("login action", () => {
   it("returns field errors without calling Auth.js", async () => {
     const state = await login(undefined, form({ email: "nope", password: "" }))
     expect(signIn).not.toHaveBeenCalled()
+    expect(mergeGuestCart).not.toHaveBeenCalled()
     expect(flash).not.toHaveBeenCalled()
     expect(state).toMatchObject({
       errors: { email: ["Please enter a valid email."], password: ["Password is required."] },
@@ -79,6 +120,7 @@ describe("login action", () => {
     const state = await login(undefined, form({ password: "wrong-pass1" }))
     expect(state).toEqual({ message: "Invalid email or password.", values: { email: "Jan@Example.com" } })
     expect(JSON.stringify(state)).not.toContain("wrong-pass1")
+    expect(mergeGuestCart).not.toHaveBeenCalled()
     expect(flash).not.toHaveBeenCalled()
     expect(redirect).not.toHaveBeenCalled()
   })

@@ -14,8 +14,14 @@ export function jwtWithRole({ token, user }: { token: JWT; user?: User | null })
   return token
 }
 
-/** Auth.js `session` callback: exposes the token's role as `session.user.role`. */
+/**
+ * Auth.js `session` callback: exposes the token's role as `session.user.role` and the user id
+ * (the token's `sub`) as `session.user.id`.
+ */
 export function sessionWithRole({ session, token }: { session: Session; token: JWT }): Session {
-  if (session.user) session.user.role = toRole(token.role)
+  if (session.user) {
+    session.user.role = toRole(token.role)
+    if (typeof token.sub === "string") session.user.id = token.sub
+  }
   return session
 }

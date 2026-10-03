@@ -40,6 +40,15 @@ describe("sessionWithRole", () => {
     })
   })
 
+  it("exposes the token's subject as session.user.id", () => {
+    expect(sessionWithRole({ session: session(), token: { sub: "u1", role: "user" } }).user).toEqual({
+      id: "u1",
+      name: "Jan Kowalski",
+      email: "jan@example.com",
+      role: "user",
+    })
+  })
+
   it("defaults to 'user' when the token has no role (sessions issued before roles existed)", () => {
     expect(sessionWithRole({ session: session(), token: {} }).user.role).toBe("user")
   })
