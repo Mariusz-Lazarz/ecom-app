@@ -128,6 +128,26 @@ describe("SiteHeader", () => {
     }
   })
 
+  it("offers a theme menu with Light, Dark and System from the header", async () => {
+    const user = userEvent.setup()
+    render(await SiteHeader())
+
+    await user.click(within(screen.getByRole("banner")).getByRole("button", { name: "Change theme" }))
+
+    const items = within(await screen.findByRole("menu")).getAllByRole("menuitemradio")
+    expect(items.map((item) => item.textContent)).toEqual(["Light", "Dark", "System"])
+  })
+
+  it("puts a Light / Dark / System switch in the mobile menu", async () => {
+    const user = userEvent.setup()
+    render(await SiteHeader())
+
+    await user.click(screen.getByRole("button", { name: "Open menu" }))
+    const dialog = await screen.findByRole("dialog", { name: siteConfig.name })
+    const group = within(dialog).getByRole("group", { name: "Theme" })
+    expect(within(group).getAllByRole("button").map((b) => b.textContent)).toEqual(["Light", "Dark", "System"])
+  })
+
   it("exposes search as a collapsed toggle button rather than a link", async () => {
     render(await SiteHeader())
 
