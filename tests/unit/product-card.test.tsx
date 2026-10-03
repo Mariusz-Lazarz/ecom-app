@@ -62,6 +62,13 @@ describe("ProductCard", () => {
     expect(within(card()).getByText(/^\(1284/)).toBeInTheDocument()
   })
 
+  it("says a product without reviews has none yet instead of a 0.0 rating", () => {
+    render(<ProductCard product={makeProduct({ rating: 0, reviewCount: 0 })} />)
+
+    expect(within(card()).getByText("No reviews yet")).toBeInTheDocument()
+    expect(within(card()).queryByText("0.0")).not.toBeInTheDocument()
+  })
+
   it("shows a regular price without a struck price or red highlight", () => {
     render(<ProductCard product={makeProduct({ priceCents: 14900 })} />)
 

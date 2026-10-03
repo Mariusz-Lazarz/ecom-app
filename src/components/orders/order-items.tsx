@@ -1,12 +1,27 @@
 import Image from "next/image"
 import Link from "next/link"
-import { ImageOff } from "lucide-react"
+import { ImageOff, PenLine, Star } from "lucide-react"
 
+import { buttonVariants } from "@/components/ui/button"
 import { formatPrice } from "@/lib/catalogue"
 import type { OrderItem } from "@/lib/orders"
+import { reviewFormHref } from "@/lib/review-utils"
 
-/** The order's lines as bought (snapshot name, brand, photo and price), each linking to its product page. */
-export function OrderItems({ items, currency }: { items: OrderItem[]; currency: string }) {
+/** Whether the customer has reviewed each product (by product id), for a delivered order. */
+export type ItemReviewStates = Record<string, "write" | "edit">
+
+type OrderItemsProps = {
+  items: OrderItem[]
+  currency: string
+  // Only for delivered orders: adds "Write a review" / "Edit your review" to lines whose product still exists.
+  reviews?: ItemReviewStates
+}
+
+/**
+ * The order's lines as bought (snapshot name, brand, photo and price), each linking to its product
+ * page, and with `reviews`, to the product page's review form.
+ */
+export function OrderItems({ items, currency, reviews }: OrderItemsProps) {
   return (
     <ul aria-label="Items" className="divide-y">
       {items.map((item) => {
@@ -39,6 +54,20 @@ export function OrderItems({ items, currency }: { items: OrderItem[]; currency: 
                     <span className="ml-1.5 line-through">{formatPrice(item.compareAtCents, currency)}</span>
                   )}
                 </p>
+                {reviews && item.productId && reviews[item.productId] && (
+                  <Link
+                    href={reviewFormHref(item.slug)}
+                    className={buttonVariants({ variant: "outline", size: "sm", className: "mt-2" })}
+                  >
+                    {reviews[item.productId] === "edit" ? (
+                      <PenLine data-icon="inline-start" />
+                    ) : (
+                      <Star data-icon="inline-start" />
+                    )}
+                    {reviews[item.productId] === "edit" ? "Edit your review" : "Write a review"}{" "}
+                    <span className="sr-only">of {item.name}</span>
+                  </Link>
+                )}
               </div>
               <p className="shrink-0 font-semibold tabular-nums">{formatPrice(item.lineTotalCents, currency)}</p>
             </div>

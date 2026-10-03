@@ -5,7 +5,7 @@ import { ChevronLeft, CircleCheck } from "lucide-react"
 
 import { CancelOrderButton } from "@/components/orders/cancel-order-button"
 import { countryName, formatOrderDateTime } from "@/components/orders/format"
-import { OrderItems } from "@/components/orders/order-items"
+import { OrderItems, type ItemReviewStates } from "@/components/orders/order-items"
 import { OrderStatusBadge } from "@/components/orders/order-status-badge"
 import { OrderTimeline } from "@/components/orders/order-timeline"
 import { OrderTotals } from "@/components/orders/order-totals"
@@ -16,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { requireUser } from "@/lib/auth-guards"
 import { canCustomerCancel, findShippingMethod } from "@/lib/order-rules"
 import { getOrderForUser, type OrderDetail } from "@/lib/orders"
+import { listReviewedProductIds } from "@/lib/reviews"
 import { formatDeliveryWindow } from "@/lib/shipping"
 
 export const metadata: Metadata = { title: "Your order — Northcart" }
@@ -27,12 +28,22 @@ function isJustPlaced(order: OrderDetail, now = Date.now()) {
   return order.status === "pending" && order.events.length === 1 && now - order.createdAt.getTime() < JUST_PLACED_MS
 }
 
-/** One of the signed-in customer's orders; anyone else's (or an unknown number) is a 404. */
+/**
+ * One of the signed-in customer's orders; anyone else's (or an unknown number) is a 404. Once delivered,
+ * each item links to its review form ("Write a review", or "Edit your review" when already reviewed).
+ */
 export default async function OrderPage({ params }: PageProps<"/orders/[number]">) {
   const { number } = await params
   const session = await requireUser(`/orders/${encodeURIComponent(number)}`)
   const order = await getOrderForUser(session.user.id, number)
   if (!order) notFound()
+
+  let reviews: ItemReviewStates | undefined
+  if (order.status === "delivered") {
+    const productIds = order.items.flatMap((item) => (item.productId ? [item.productId] : []))
+    const reviewed = await listReviewedProductIds(session.user.id, productIds)
+    reviews = Object.fromEntries(productIds.map((id) => [id, reviewed.has(id) ? "edit" : "write"]))
+  }
 
   const justPlaced = isJustPlaced(order)
   const delivery = findShippingMethod(order.shippingMethod.id)
@@ -90,7 +101,7 @@ export default async function OrderPage({ params }: PageProps<"/orders/[number]"
                 <CardTitle className="text-lg font-semibold">Items ({order.itemCount})</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <OrderItems items={order.items} currency={order.currency} />
+                <OrderItems items={order.items} currency={order.currency} reviews={reviews} />
                 <div className="border-t pt-4">
                   <OrderTotals {...order} />
                 </div>
