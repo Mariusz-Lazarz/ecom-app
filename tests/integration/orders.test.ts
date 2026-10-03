@@ -591,6 +591,36 @@ describe("admin list and stats", () => {
     expect((await orders.listOrders({ q: `orders-${run}-%` })).total).toBe(0)
   })
 
+  it("lists the oldest pending and processing orders first, up to the limit", async () => {
+    const placed = []
+    for (let i = 0; i < 5; i++) placed.push(await pendingOrder())
+    const [pending, processing, shipped, cancelled, newest] = placed
+    await advance(processing.number, ["processing"], admin)
+    await advance(shipped.number, ["processing", "shipped"], admin)
+    await advance(cancelled.number, ["cancelled"], admin)
+    // Older than anything else in the database (seeded orders included), so these sort first.
+    for (const [i, order] of placed.entries()) {
+      await query("UPDATE orders SET created_at = $2 WHERE number = $1", [
+        order.number,
+        new Date(Date.UTC(2000, 0, 1 + i)),
+      ])
+    }
+
+    const oldest = await orders.listOrdersAwaitingAction(3)
+
+    expect(oldest.map((o) => [o.number, o.status])).toEqual([
+      [pending.number, "pending"],
+      [processing.number, "processing"],
+      [newest.number, "pending"],
+    ])
+    expect(oldest[0]).toMatchObject({
+      itemCount: 1,
+      totalCents: 1599,
+      customer: { id: pending.user.id, name: "Order Tester", email: pending.user.email },
+    })
+    expect(await orders.listOrdersAwaitingAction(1)).toHaveLength(1)
+  })
+
   it("counts orders per status and sums revenue without cancelled or rejected", async () => {
     const before = await orders.getOrderStats()
     const placed = []
