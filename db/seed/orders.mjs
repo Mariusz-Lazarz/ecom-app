@@ -7,7 +7,7 @@ import { CUSTOMERS } from "./customer.mjs"
 const HOUR = 60 * 60 * 1000
 
 // Where the admin's own sample orders ship to.
-const ADMIN_ADDRESS = {
+export const ADMIN_ADDRESS = {
   line1: "ul. Floriańska 15",
   line2: "m. 3",
   city: "Kraków",

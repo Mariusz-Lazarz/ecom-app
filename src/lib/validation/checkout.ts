@@ -65,12 +65,21 @@ export type ShippingAddress = z.output<typeof ShippingAddressSchema>
 export type CheckoutInput = z.output<typeof CheckoutSchema>
 export type CheckoutField = keyof CheckoutInput
 
+/** The address picker's value for "Use a new address" (any other value is a saved address's id). */
+export const NEW_ADDRESS = "new"
+
+/**
+ * Every field the checkout form posts: the address and methods, plus `addressId` (the picked saved
+ * address, or NEW_ADDRESS) and `saveAddress` ("on" to save a new address to the account).
+ */
+export type CheckoutFormField = CheckoutField | "addressId" | "saveAddress"
+
 /** The checkout form's fields as typed, echoed back so a failed submit keeps them. */
-export type CheckoutValues = Partial<Record<CheckoutField, string>>
+export type CheckoutValues = Partial<Record<CheckoutFormField, string>>
 
 export type CheckoutFormState =
   | {
-      errors?: Partial<Record<CheckoutField, string[]>>
+      errors?: Partial<Record<CheckoutFormField, string[]>>
       message?: string
       values?: CheckoutValues
     }

@@ -5,11 +5,19 @@ import { redirect } from "next/navigation"
 import * as z from "zod"
 
 import { auth } from "@/auth"
+import * as addresses from "@/lib/addresses"
 import { AppError, GENERIC_MESSAGE, logError } from "@/lib/errors"
 import { flash } from "@/lib/flash"
 import type { OrderStatus } from "@/lib/order-rules"
 import * as orders from "@/lib/orders"
-import { CheckoutSchema, type CheckoutField, type CheckoutFormState, type CheckoutValues } from "@/lib/validation/checkout"
+import { AddressIdSchema } from "@/lib/validation/addresses"
+import {
+  CheckoutSchema,
+  NEW_ADDRESS,
+  type CheckoutFormField,
+  type CheckoutFormState,
+  type CheckoutValues,
+} from "@/lib/validation/checkout"
 import {
   OrderNumberSchema,
   OrderStatusChangeSchema,
@@ -32,7 +40,11 @@ const CHECKOUT_FIELDS = [
   "phone",
   "shippingMethodId",
   "paymentMethodId",
-] as const satisfies readonly CheckoutField[]
+  "addressId",
+  "saveAddress",
+] as const satisfies readonly CheckoutFormField[]
+
+const ADDRESS_GONE = "That address is no longer saved. Pick another one or enter a new address."
 
 /** What `cancelOrder` and `changeOrderStatus` resolve to. */
 export type OrderActionResult = {
@@ -51,9 +63,15 @@ function expectedMessage(err: unknown, scope: string) {
 
 /**
  * Places an order from the signed-in user's cart. For `useActionState` with the checkout form
- * (fields: CHECKOUT_FIELDS). Signed-out visitors are sent to /login. On success it queues a
- * toast and redirects to `/orders/<number>`; otherwise it returns `errors` (invalid fields) or a
- * `message` (empty cart, stock problems…) with the typed `values`.
+ * (fields: CHECKOUT_FIELDS). Signed-out visitors are sent to /login.
+ *
+ * The address is either a saved one (`addressId`, which must be the user's own; its fields replace
+ * any posted address fields) or the posted fields (no `addressId`, or NEW_ADDRESS). With
+ * `saveAddress=on` a new address is also saved to the account once the order is placed; failing to
+ * save it doesn't undo the order, the toast just says so. The order snapshots the address either way.
+ *
+ * On success it queues a toast and redirects to `/orders/<number>`; otherwise it returns `errors`
+ * (invalid fields) or a `message` (empty cart, stock problems…) with the typed `values`.
  */
 export async function placeOrder(_state: CheckoutFormState, formData: FormData): Promise<CheckoutFormState> {
   const session = await auth()
@@ -66,7 +84,20 @@ export async function placeOrder(_state: CheckoutFormState, formData: FormData):
     if (typeof value === "string") values[field] = value
   }
 
-  const parsed = CheckoutSchema.safeParse(values)
+  const savedId = values.addressId && values.addressId !== NEW_ADDRESS ? values.addressId : null
+  let input: CheckoutValues = values
+  if (savedId) {
+    const id = AddressIdSchema.safeParse(savedId)
+    const saved = id.success ? await addresses.getAddress(userId, id.data) : null
+    if (!saved) {
+      refresh()
+      return { errors: { addressId: [ADDRESS_GONE] }, values, message: ADDRESS_GONE }
+    }
+    const { fullName, line1, line2, city, postalCode, country, phone } = saved
+    input = { ...values, fullName, line1, line2: line2 ?? "", city, postalCode, country, phone }
+  }
+
+  const parsed = CheckoutSchema.safeParse(input)
   if (!parsed.success) {
     return { errors: z.flattenError(parsed.error).fieldErrors, values, message: "Please check the highlighted fields." }
   }
@@ -80,7 +111,29 @@ export async function placeOrder(_state: CheckoutFormState, formData: FormData):
     return { message: expectedMessage(err, "orders.place"), values }
   }
 
-  await flash({ type: "success", title: "Order placed", description: `Thanks! Your order ${number} is confirmed.` })
+  let description = `Thanks! Your order ${number} is confirmed.`
+  if (!savedId && values.saveAddress === "on") {
+    const { fullName, line1, line2, city, postalCode, country, phone } = parsed.data
+    try {
+      const existing = await addresses.listAddresses(userId)
+      await addresses.createAddress(userId, {
+        // The first saved address is "Home"; later ones are named after their city (renamable later).
+        label: existing.length === 0 ? "Home" : city.slice(0, 40),
+        fullName,
+        line1,
+        line2,
+        city,
+        postalCode,
+        country,
+        phone,
+      })
+      description += " The address was saved to your account."
+    } catch (err) {
+      description += ` We couldn't save the address: ${expectedMessage(err, "orders.saveAddress")}`
+    }
+  }
+
+  await flash({ type: "success", title: "Order placed", description })
   // The cart is now empty: drop cached pages (header badge, /cart) before leaving.
   revalidatePath("/", "layout")
   redirect(`/orders/${number}`)
