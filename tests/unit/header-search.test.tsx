@@ -16,7 +16,7 @@ type Deferred = { url: string; signal: AbortSignal; resolve: (body: unknown, sta
 
 // Each fetch stays pending until the test resolves it, so tests control the order responses arrive in.
 let requests: Deferred[] = []
-const fetchMock = vi.fn((input: string, init?: RequestInit) => {
+const fetchMockImpl = (input: string, init?: RequestInit) => {
   return new Promise<Response>((resolve) => {
     requests.push({
       url: input,
@@ -24,7 +24,8 @@ const fetchMock = vi.fn((input: string, init?: RequestInit) => {
       resolve: (body, status = 200) => resolve(new Response(JSON.stringify(body), { status })),
     })
   })
-})
+}
+const fetchMock = vi.fn(fetchMockImpl)
 
 const list = (items: ReturnType<typeof makeProduct>[]) => ({
   items: JSON.parse(JSON.stringify(items)),
@@ -87,12 +88,21 @@ describe("HeaderSearch live suggestions", () => {
   it("asks the API for six products once typing pauses, with the trimmed term", async () => {
     const { user, input } = await openSearch()
 
+    // Measured rather than checked at a fixed moment, so a slow machine can't make this flaky.
+    let lastKeystrokeAt = 0
+    input.addEventListener("input", () => (lastKeystrokeAt = performance.now()))
+    let requestedAt = 0
+    fetchMock.mockImplementationOnce((url, init) => {
+      requestedAt = performance.now()
+      return fetchMockImpl(url, init)
+    })
+
     await user.type(input, " ar")
-    // Still inside the debounce window: nothing has been requested yet.
-    expect(fetchMock).not.toHaveBeenCalled()
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1), { timeout: SUGGEST_DEBOUNCE_MS * 4 })
     expect(requests[0].url).toBe("/api/products?q=ar&pageSize=6")
+    // The request only went out once typing had paused for the debounce window.
+    expect(requestedAt - lastKeystrokeAt).toBeGreaterThanOrEqual(SUGGEST_DEBOUNCE_MS - 5)
   })
 
   it("sends one request for a burst of keystrokes, for the final term", async () => {
