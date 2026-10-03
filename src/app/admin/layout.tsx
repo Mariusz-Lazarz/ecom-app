@@ -19,7 +19,7 @@ export default function AdminLayout({ children }: LayoutProps<"/admin">) {
             <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <Shield className="size-4" />
             </span>
-            <span className="text-lg">Admin</span>
+            <span className="sr-only text-lg sm:not-sr-only">Admin</span>
           </Link>
           <div className="sm:ml-4">
             <AdminNav />
