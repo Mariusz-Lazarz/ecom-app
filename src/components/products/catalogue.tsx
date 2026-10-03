@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { SearchX, X } from "lucide-react"
 
-import { Pagination } from "@/components/products/pagination"
+import { PaginationNav } from "@/components/pagination-nav"
 import { ProductCard } from "@/components/products/product-card"
 import { SaleFilter } from "@/components/products/sale-filter"
 import { SortSelect } from "@/components/products/sort-select"
@@ -129,7 +129,11 @@ export function Catalogue({ basePath, title, description, query, activeCategory,
             />
           )}
 
-          <Pagination basePath={basePath} query={query} pageCount={list.pageCount} />
+          <PaginationNav
+            page={query.page}
+            pageCount={list.pageCount}
+            href={(page) => catalogueHref(basePath, { ...query, page })}
+          />
         </section>
       </div>
     </div>
