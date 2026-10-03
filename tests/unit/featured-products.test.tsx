@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { makeProduct } from "./fixtures/products"
 
 vi.mock("server-only", () => ({}))
+// Product cards import the cart Server Actions, which outside Next.js would pull in the cart module.
+vi.mock("@/app/actions/cart", () => ({ addToCart: vi.fn() }))
 const listProducts = vi.fn()
 vi.mock("@/lib/products", () => ({ listProducts }))
 

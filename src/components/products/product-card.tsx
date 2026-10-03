@@ -61,7 +61,7 @@ export function ProductCard({ product, eager = false }: ProductCardProps) {
             compareAtCents={product.onSale ? product.compareAtCents : null}
             currency={product.currency}
           />
-          <AddToCartButton productName={product.name} inStock={product.inStock} />
+          <AddToCartButton productId={product.id} productName={product.name} inStock={product.inStock} />
         </div>
       </CardContent>
     </Card>
