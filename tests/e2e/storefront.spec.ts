@@ -14,6 +14,13 @@ async function apiList(request: APIRequestContext, search = "") {
 const cards = (page: Page) => page.getByRole("region", { name: "Products" }).locator('[data-slot="card"]')
 const resultCount = (page: Page) => page.getByRole("region", { name: "Products" }).getByRole("status")
 const isMobile = (page: Page) => (page.viewportSize()?.width ?? 0) < 768
+const sortSelect = (page: Page) => page.getByRole("combobox", { name: "Sort by" })
+const sortValue = (page: Page) => sortSelect(page).locator('[data-slot="select-value"]')
+
+async function chooseSort(page: Page, label: string) {
+  await sortSelect(page).click()
+  await page.getByRole("option", { name: label, exact: true }).click()
+}
 
 const prices = (page: Page) =>
   cards(page).evaluateAll((els) =>
@@ -44,16 +51,35 @@ test.describe("catalogue", () => {
     await expect(pagination.getByRole("link", { name: "Page 2" })).toHaveAttribute("aria-current", "page")
   })
 
-  test("sorts by price and keeps the sort in the URL", async ({ page }) => {
+  test("sorts by price from the Sort by select and keeps the sort in the URL", async ({ page }) => {
     await page.goto("/products")
+    await expect(sortValue(page)).toHaveText("Featured")
 
-    await page.getByRole("combobox", { name: "Sort by" }).selectOption("price-asc")
+    await chooseSort(page, "Price: low to high")
 
-    await expect(page).toHaveURL(/sort=price-asc/)
-    await expect(page.getByRole("combobox", { name: "Sort by" })).toHaveValue("price-asc")
+    await expect(page).toHaveURL(/\/products\?sort=price-asc$/)
+    await expect(sortValue(page)).toHaveText("Price: low to high")
     await expect(cards(page)).toHaveCount(12)
-    const values = await prices(page)
-    expect(values).toEqual([...values].sort((a, b) => a - b))
+    const ascending = await prices(page)
+    expect(ascending).toEqual([...ascending].sort((a, b) => a - b))
+
+    await chooseSort(page, "Price: high to low")
+
+    await expect(page).toHaveURL(/\/products\?sort=price-desc$/)
+    await expect(sortValue(page)).toHaveText("Price: high to low")
+    await expect.poll(() => prices(page)).not.toEqual(ascending)
+    const descending = await prices(page)
+    expect(descending).toEqual([...descending].sort((a, b) => b - a))
+    expect(descending[0]).toBeGreaterThan(ascending[0])
+  })
+
+  test("changing the sort keeps the other filters and returns to page 1", async ({ page }) => {
+    await page.goto("/categories/bags?onSale=true&page=1")
+
+    await chooseSort(page, "Newest")
+
+    await expect(page).toHaveURL(/\/categories\/bags\?sort=newest&onSale=true$/)
+    await expect(page.getByRole("checkbox", { name: "On sale only" })).toBeChecked()
   })
 
   test("falls back to defaults for invalid params instead of failing", async ({ page, request }) => {
@@ -63,7 +89,7 @@ test.describe("catalogue", () => {
 
     expect(response?.status()).toBe(200)
     await expect(resultCount(page)).toHaveText(`Showing 1–12 of ${total} products`)
-    await expect(page.getByRole("combobox", { name: "Sort by" })).toHaveValue("featured")
+    await expect(sortValue(page)).toHaveText("Featured")
   })
 
   test("shows an empty state when nothing matches", async ({ page }) => {
@@ -118,9 +144,10 @@ test.describe("categories", () => {
     await expect(resultCount(page)).toHaveText(`Showing 1–${bags.total} of ${bags.total} products`)
     await expect(page.getByRole("link", { name: "Bags", exact: true }).first()).toHaveAttribute("aria-current", "page")
 
-    await page.getByRole("link", { name: /On sale only/ }).click()
+    await page.getByRole("checkbox", { name: "On sale only" }).click()
 
     await expect(page).toHaveURL(/\/categories\/bags\?onSale=true$/)
+    await expect(page.getByRole("checkbox", { name: "On sale only" })).toBeChecked()
     await expect(cards(page)).toHaveCount(bagsOnSale.total)
     // Every sale card shows a struck-through "was" price.
     await expect(cards(page).filter({ has: page.locator(".line-through") })).toHaveCount(bagsOnSale.total)
@@ -142,7 +169,7 @@ test.describe("search", () => {
 
     await page.goto("/")
     await page.getByRole("button", { name: "Search" }).click()
-    const searchbox = page.getByRole("searchbox", { name: "Search products" })
+    const searchbox = page.getByRole("combobox", { name: "Search products" })
     await expect(searchbox).toBeFocused()
     await searchbox.fill("leather")
     await searchbox.press("Enter")
@@ -152,7 +179,7 @@ test.describe("search", () => {
     await expect(resultCount(page)).toContainText(`of ${leather.total} product`)
     await expect(page.getByRole("search")).toBeHidden()
 
-    await page.getByRole("link", { name: /On sale only/ }).click()
+    await page.getByRole("checkbox", { name: "On sale only" }).click()
     await expect(page).toHaveURL(/q=leather&onSale=true/)
     await expect(resultCount(page)).toContainText(`of ${leatherOnSale.total} product`)
 
@@ -165,12 +192,69 @@ test.describe("search", () => {
 
     await page.goto("/categories")
     await page.getByRole("button", { name: "Search" }).click()
-    await expect(page.getByRole("searchbox", { name: "Search products" })).toBeInViewport()
-    await page.getByRole("searchbox", { name: "Search products" }).fill("watch")
-    await page.getByRole("button", { name: "Go" }).click()
+    await expect(page.getByRole("combobox", { name: "Search products" })).toBeInViewport()
+    await page.getByRole("combobox", { name: "Search products" }).fill("watch")
+    // While suggestions are open the combobox hides the rest of the page from assistive tech, so
+    // the button is found including hidden elements; a tap on it must still run the search.
+    await page.getByRole("button", { name: "Go", includeHidden: true }).click()
 
     await expect(page).toHaveURL(/\/products\?q=watch$/)
     await expect(cards(page).first()).toBeVisible()
+  })
+})
+
+test.describe("live search", () => {
+  test("suggests matching products as you type and opens the one clicked", async ({ page, request }) => {
+    const expected = await apiList(request, "?q=leather&pageSize=6")
+    expect(expected.items.length).toBeGreaterThan(1)
+    const target = expected.items[1]
+
+    await page.goto("/")
+    await page.getByRole("button", { name: "Search" }).click()
+    await page.getByRole("combobox", { name: "Search products" }).pressSequentially("leather")
+
+    const suggestions = page.getByRole("listbox", { name: "Suggested products" })
+    await expect(suggestions.getByRole("option")).toHaveCount(expected.items.length)
+    await expect(suggestions.getByRole("option").first()).toContainText(expected.items[0].name)
+    // Each suggestion shows a loaded thumbnail.
+    await expect
+      .poll(() => suggestions.locator("img").first().evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth))
+      .toBeGreaterThan(0)
+    await expect(page.getByRole("link", { name: "See all results for “leather”" })).toHaveAttribute(
+      "href",
+      "/products?q=leather",
+    )
+
+    await suggestions.getByRole("option", { name: new RegExp(target.name) }).click()
+
+    await expect(page).toHaveURL(`/products/${target.slug}`)
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(target.name)
+    await expect(page.getByRole("search")).toBeHidden()
+  })
+
+  test("opens the highlighted suggestion with the keyboard", async ({ page, request }) => {
+    const [first] = (await apiList(request, "?q=leather&pageSize=6")).items
+
+    await page.goto("/")
+    await page.getByRole("button", { name: "Search" }).click()
+    const input = page.getByRole("combobox", { name: "Search products" })
+    await input.pressSequentially("leather")
+    await expect(page.getByRole("listbox", { name: "Suggested products" }).getByRole("option").first()).toBeVisible()
+
+    await input.press("ArrowDown")
+    await input.press("Enter")
+
+    await expect(page).toHaveURL(`/products/${first.slug}`)
+  })
+
+  test("says when nothing matches", async ({ page }) => {
+    await page.goto("/")
+    await page.getByRole("button", { name: "Search" }).click()
+    await page.getByRole("combobox", { name: "Search products" }).pressSequentially("qqzzxx")
+
+    await expect(page.getByText("No products match “qqzzxx”.")).toBeVisible()
+    await page.keyboard.press("Escape")
+    await expect(page.getByRole("search")).toBeHidden()
   })
 })
 
@@ -243,7 +327,7 @@ test.describe("navigation shortcuts", () => {
 
     await open("New arrivals")
     await expect(page).toHaveURL(/\/products\?sort=newest$/)
-    await expect(page.getByRole("combobox", { name: "Sort by" })).toHaveValue("newest")
+    await expect(sortValue(page)).toHaveText("Newest")
 
     await open("Deals")
     await expect(page).toHaveURL(/\/products\?onSale=true$/)

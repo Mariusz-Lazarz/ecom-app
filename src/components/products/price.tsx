@@ -5,7 +5,8 @@ type PriceProps = {
   priceCents: number
   compareAtCents: number | null
   currency: string
-  size?: "default" | "lg"
+  // "sm" is for compact lists such as search suggestions.
+  size?: "sm" | "default" | "lg"
   className?: string
 }
 
@@ -17,7 +18,7 @@ export function Price({ priceCents, compareAtCents, currency, size = "default", 
       <span
         className={cn(
           "font-semibold",
-          size === "lg" ? "text-3xl" : "text-lg",
+          { sm: "text-sm", default: "text-lg", lg: "text-3xl" }[size],
           discount !== null && "text-destructive",
         )}
       >
@@ -25,7 +26,12 @@ export function Price({ priceCents, compareAtCents, currency, size = "default", 
       </span>
       {discount !== null && (
         <>
-          <span className={cn("text-muted-foreground line-through", size === "lg" ? "text-lg" : "text-sm")}>
+          <span
+            className={cn(
+              "text-muted-foreground line-through",
+              { sm: "text-xs", default: "text-sm", lg: "text-lg" }[size],
+            )}
+          >
             <span className="sr-only">Was </span>
             {formatPrice(compareAtCents!, currency)}
           </span>
