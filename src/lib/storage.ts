@@ -13,13 +13,16 @@ import sharp from "sharp"
 
 import { BadRequestError } from "@/lib/errors"
 import { logger } from "@/lib/logger"
+import { MAX_UPLOAD_BYTES, type ImageType } from "@/lib/media-limits"
+
+export { MAX_UPLOAD_BYTES, type ImageType }
 
 const log = logger.child({ scope: "storage" })
 
 // Uploads are normalised before they're stored: EXIF orientation applied, scaled down to fit
 // MAX_IMAGE_DIMENSION, re-encoded as WebP and stripped of metadata (EXIF, GPS). A 10 MB phone
 // photo ends up as a few hundred KB, and next/image derives its per-screen variants from that.
-export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+// The size and type limits live in src/lib/media-limits.ts, so forms can check files first.
 export const MAX_IMAGE_DIMENSION = 2000
 const WEBP_QUALITY = 80
 // A small file can still decode to billions of pixels; refuse anything above ~50 megapixels.
@@ -27,8 +30,6 @@ const MAX_INPUT_PIXELS = 50_000_000
 
 // Keys are content hashes, so a URL always points at the same bytes and CDNs/browsers can keep it forever.
 const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
-
-export type ImageType = "image/jpeg" | "image/png" | "image/webp" | "image/avif"
 
 export type StoredImage = {
   key: string
