@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { AdminProduct, AdminProductListOptions, AdminProductSummary } from "@/lib/admin-products"
 import type { AdminOrderSummary, OrderDetail, OrderListOptions, OrderStats, Page } from "@/lib/orders"
+import type { AdminReview } from "@/lib/reviews"
+import type { AdminReviewListQuery } from "@/lib/validation/reviews"
 
 import { makeEvent, makeOrderDetail, makeOrderSummary } from "./fixtures/orders"
 
@@ -15,6 +17,9 @@ const listLowStockProducts = vi.fn<(limit: number) => Promise<AdminProductSummar
 const listAdminProducts = vi.fn<(options: AdminProductListOptions) => Promise<Page<AdminProductSummary>>>()
 const getAdminProduct = vi.fn<(id: string) => Promise<AdminProduct | null>>()
 const listCategories = vi.fn()
+const listLatestReviews = vi.fn<(limit: number) => Promise<AdminReview[]>>()
+const listAdminReviews = vi.fn<(options: AdminReviewListQuery) => Promise<Page<AdminReview>>>()
+const getReviewStatusCounts = vi.fn<() => Promise<{ published: number; hidden: number }>>()
 const notFound = vi.fn(() => {
   throw Object.assign(new Error("NEXT_HTTP_ERROR_FALLBACK;404"), { digest: "NEXT_HTTP_ERROR_FALLBACK;404" })
 })
@@ -38,6 +43,12 @@ vi.mock("@/lib/admin-products", () => ({
   getAdminProduct: (id: string) => getAdminProduct(id),
 }))
 vi.mock("@/lib/categories", () => ({ listCategories: () => listCategories() }))
+vi.mock("@/lib/reviews", () => ({
+  listLatestReviews: (limit: number) => listLatestReviews(limit),
+  listAdminReviews: (options: AdminReviewListQuery) => listAdminReviews(options),
+  getReviewStatusCounts: () => getReviewStatusCounts(),
+}))
+vi.mock("@/app/actions/reviews", () => ({ setReviewStatus: vi.fn(), deleteReview: vi.fn() }))
 vi.mock("@/app/actions/orders", () => ({ changeOrderStatus: vi.fn() }))
 vi.mock("@/app/actions/admin-products", () => ({
   saveProduct: vi.fn(),
@@ -51,6 +62,7 @@ const { default: OrderPage } = await import("@/app/admin/orders/[number]/page")
 const { default: ProductsPage } = await import("@/app/admin/products/page")
 const { default: NewProductPage } = await import("@/app/admin/products/new/page")
 const { default: EditProductPage } = await import("@/app/admin/products/[id]/page")
+const { default: ReviewsPage } = await import("@/app/admin/reviews/page")
 
 const stats: OrderStats = {
   counts: { pending: 2, processing: 1, shipped: 0, delivered: 3, cancelled: 1, rejected: 0 },
@@ -85,7 +97,23 @@ const renderProducts = async (searchParams: Record<string, string | string[]> = 
 const renderEditProduct = async (id: string) =>
   render(await EditProductPage({ params: Promise.resolve({ id }), searchParams: Promise.resolve({}) }))
 
+const renderReviews = async (searchParams: Record<string, string | string[]> = {}) =>
+  render(await ReviewsPage({ params: Promise.resolve({}), searchParams: Promise.resolve(searchParams) }))
+
 const PRODUCT_ID = "5b0e7c1d-2a3f-4b5c-8d9e-0f1a2b3c4d5e"
+
+const adminReview = (overrides: Partial<AdminReview> = {}): AdminReview => ({
+  id: "r-1",
+  rating: 4,
+  title: "Sturdy mug",
+  body: "Keeps coffee hot for ages.",
+  status: "published",
+  verified: true,
+  createdAt: new Date("2026-09-21T10:00:00Z"),
+  product: { id: PRODUCT_ID, name: "Trail Mug", slug: "trail-mug" },
+  author: { id: "user-1", name: "Ada Lovelace", email: "ada@example.com" },
+  ...overrides,
+})
 const categories = [
   { id: "11111111-1111-4111-8111-111111111111", slug: "audio", name: "Audio", icon: "headphones" },
   { id: "22222222-2222-4222-8222-222222222222", slug: "home-kitchen", name: "Home & Kitchen", icon: "home" },
@@ -138,6 +166,9 @@ beforeEach(() => {
   listAdminProducts.mockReset().mockResolvedValue(page([]) as unknown as Page<AdminProductSummary>)
   getAdminProduct.mockReset().mockResolvedValue(null)
   listCategories.mockReset().mockResolvedValue(categories)
+  listLatestReviews.mockReset().mockResolvedValue([])
+  listAdminReviews.mockReset().mockResolvedValue(page([]) as unknown as Page<AdminReview>)
+  getReviewStatusCounts.mockReset().mockResolvedValue({ published: 0, hidden: 0 })
   notFound.mockClear()
 })
 
@@ -152,6 +183,16 @@ describe("admin pages guard access", () => {
     expect(getOrderStats).not.toHaveBeenCalled()
     expect(listOrdersAwaitingAction).not.toHaveBeenCalled()
     expect(listLowStockProducts).not.toHaveBeenCalled()
+    expect(listLatestReviews).not.toHaveBeenCalled()
+  })
+
+  it("the review list 404s for non-admins before reading anything", async () => {
+    forbid()
+
+    await expect(renderReviews({ status: "hidden" })).rejects.toMatchObject(NOT_FOUND)
+    expect(requireAdmin).toHaveBeenCalledExactlyOnceWith("/admin/reviews")
+    expect(listAdminReviews).not.toHaveBeenCalled()
+    expect(getReviewStatusCounts).not.toHaveBeenCalled()
   })
 
   it("the product pages 404 for non-admins before reading anything", async () => {
@@ -231,6 +272,88 @@ describe("admin dashboard", () => {
     render(await DashboardPage())
 
     expect(screen.getByText("Every product is well stocked.")).toBeInTheDocument()
+  })
+
+  it("lists the five latest reviews with their product, author and status", async () => {
+    listLatestReviews.mockResolvedValue([
+      adminReview({ id: "r-2", title: "Spam", status: "hidden", rating: 1 }),
+      adminReview(),
+    ])
+
+    render(await DashboardPage())
+
+    expect(listLatestReviews).toHaveBeenCalledExactlyOnceWith(5)
+    const rows = within(screen.getByRole("list", { name: "Latest reviews" })).getAllByRole("listitem")
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "SpamTrail Mug · Ada LovelaceHidden",
+      "Sturdy mugTrail Mug · Ada LovelacePublished",
+    ])
+    expect(within(rows[1]).getByRole("img", { name: "4 out of 5 stars" })).toBeInTheDocument()
+    expect(within(rows[1]).getByRole("link", { name: "Trail Mug" })).toHaveAttribute("href", "/products/trail-mug#reviews")
+    expect(screen.getByRole("link", { name: /All reviews$/ })).toHaveAttribute("href", "/admin/reviews")
+  })
+
+  it("says so when there are no reviews yet", async () => {
+    render(await DashboardPage())
+
+    expect(screen.getByText("No reviews yet.")).toBeInTheDocument()
+  })
+})
+
+describe("admin review list", () => {
+  it("lists the reviews with the parsed filters, status counts and moderation buttons", async () => {
+    listAdminReviews.mockResolvedValue({
+      items: [adminReview(), adminReview({ id: "r-2", title: "Spam", status: "hidden", verified: false })],
+      page: 1,
+      pageSize: 20,
+      total: 2,
+      pageCount: 1,
+    })
+    getReviewStatusCounts.mockResolvedValue({ published: 7, hidden: 2 })
+
+    await renderReviews({ status: "hidden", rating: "4", q: " mug " })
+
+    expect(listAdminReviews).toHaveBeenCalledExactlyOnceWith({
+      status: "hidden",
+      rating: 4,
+      q: "mug",
+      page: 1,
+      pageSize: 20,
+    })
+    expect(screen.getByText("2 reviews · hidden · 4 stars matching “mug”")).toBeInTheDocument()
+    const chips = within(screen.getByRole("navigation", { name: "Filter by status" })).getAllByRole("link")
+    expect(chips.map((chip) => [chip.textContent, chip.getAttribute("href")])).toEqual([
+      ["All9", "/admin/reviews?rating=4&q=mug"],
+      ["Published7", "/admin/reviews?status=published&rating=4&q=mug"],
+      ["Hidden2", "/admin/reviews?status=hidden&rating=4&q=mug"],
+    ])
+    const rows = within(screen.getByRole("table", { name: "Reviews" })).getAllByRole("row").slice(1)
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toHaveTextContent("Sturdy mug")
+    expect(within(rows[0]).getByLabelText("Verified purchase")).toBeInTheDocument()
+    expect(within(rows[0]).getByRole("button", { name: "Hide review “Sturdy mug” by Ada Lovelace" })).toBeInTheDocument()
+    expect(within(rows[1]).queryByLabelText("Verified purchase")).not.toBeInTheDocument()
+    expect(within(rows[1]).getByRole("button", { name: "Unhide review “Spam” by Ada Lovelace" })).toBeInTheDocument()
+    expect(within(rows[1]).getByRole("button", { name: "Delete review “Spam” by Ada Lovelace" })).toBeInTheDocument()
+  })
+
+  it("falls back to defaults for invalid params", async () => {
+    await renderReviews({ status: "deleted", rating: "6", page: "0" })
+
+    expect(listAdminReviews).toHaveBeenCalledExactlyOnceWith({
+      status: undefined,
+      rating: undefined,
+      q: undefined,
+      page: 1,
+      pageSize: 20,
+    })
+  })
+
+  it("shows an empty state with a way to clear the filters", async () => {
+    await renderReviews({ rating: "1" })
+
+    expect(screen.getByText("No reviews match these filters.")).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Clear filters" })).toHaveAttribute("href", "/admin/reviews")
   })
 })
 

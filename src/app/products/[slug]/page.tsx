@@ -10,11 +10,13 @@ import { Price } from "@/components/products/price"
 import { ProductCard } from "@/components/products/product-card"
 import { ProductGallery } from "@/components/products/product-gallery"
 import { Rating } from "@/components/products/rating"
+import { ProductReviews } from "@/components/reviews/product-reviews"
 import { SiteFooter } from "@/components/site-footer"
 import { SiteHeader } from "@/components/site-header"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { getProductBySlug } from "@/lib/products"
+import { parseProductReviewQuery, REVIEWS_ANCHOR } from "@/lib/review-utils"
 import { shippingRules } from "@/lib/shipping"
 
 // generateMetadata and the page both need the product; cache() makes that one query per request.
@@ -29,9 +31,10 @@ export async function generateMetadata({ params }: PageProps<"/products/[slug]">
   return { title: `${product.name} — Northcart`, description: product.shortDescription }
 }
 
-export default async function ProductPage({ params }: PageProps<"/products/[slug]">) {
+export default async function ProductPage({ params, searchParams }: PageProps<"/products/[slug]">) {
   const product = await loadProduct((await params).slug)
   if (!product) notFound()
+  const reviewQuery = parseProductReviewQuery(await searchParams)
 
   return (
     <>
@@ -73,7 +76,9 @@ export default async function ProductPage({ params }: PageProps<"/products/[slug
                 {product.badge && <Badge>{product.badge}</Badge>}
               </div>
               <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">{product.name}</h1>
-              <Rating rating={product.rating} reviewCount={product.reviewCount} className="text-sm" />
+              <a href={`#${REVIEWS_ANCHOR}`} className="inline-flex rounded-sm hover:underline">
+                <Rating rating={product.rating} reviewCount={product.reviewCount} className="text-sm" />
+              </a>
             </div>
 
             <Price
@@ -134,6 +139,8 @@ export default async function ProductPage({ params }: PageProps<"/products/[slug
             )}
           </div>
         </div>
+
+        <ProductReviews product={product} query={reviewQuery} />
 
         {product.related.length > 0 && (
           <section className="mt-16">

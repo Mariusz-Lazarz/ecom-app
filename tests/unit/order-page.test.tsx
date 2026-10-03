@@ -7,6 +7,7 @@ import { makeEvent, makeOrderDetail } from "./fixtures/orders"
 
 const requireUser = vi.fn()
 const getOrderForUser = vi.fn<(userId: string, number: string) => Promise<OrderDetail | null>>()
+const listReviewedProductIds = vi.fn<(userId: string, productIds: string[]) => Promise<Set<string>>>()
 const notFound = vi.fn(() => {
   throw Object.assign(new Error("NEXT_HTTP_ERROR_FALLBACK;404"), { digest: "NEXT_HTTP_ERROR_FALLBACK;404" })
 })
@@ -14,6 +15,9 @@ const notFound = vi.fn(() => {
 vi.mock("server-only", () => ({}))
 vi.mock("@/lib/auth-guards", () => ({ requireUser: (path: string) => requireUser(path) }))
 vi.mock("@/lib/orders", () => ({ getOrderForUser: (u: string, n: string) => getOrderForUser(u, n) }))
+vi.mock("@/lib/reviews", () => ({
+  listReviewedProductIds: (u: string, ids: string[]) => listReviewedProductIds(u, ids),
+}))
 vi.mock("next/navigation", () => ({ notFound: () => notFound() }))
 vi.mock("@/app/actions/orders", () => ({ cancelOrder: vi.fn() }))
 // SiteHeader is an async Server Component (reads the session) and has its own tests.
@@ -30,6 +34,7 @@ async function renderOrder(order: OrderDetail | null, number = order?.number ?? 
 beforeEach(() => {
   requireUser.mockReset().mockResolvedValue({ user: { id: "user-1", name: "Ada Lovelace" } })
   getOrderForUser.mockReset()
+  listReviewedProductIds.mockReset().mockResolvedValue(new Set())
   notFound.mockClear()
 })
 
@@ -93,6 +98,42 @@ describe("Order page", () => {
     async (status) => {
       await renderOrder(makeOrderDetail({ status }))
       expect(screen.queryByRole("button", { name: "Cancel order" })).not.toBeInTheDocument()
+    },
+  )
+
+  it("links each item of a delivered order to its review form, as write or edit", async () => {
+    const order = makeOrderDetail({ status: "delivered" })
+    order.items[1] = { ...order.items[1], productId: "p2" }
+    listReviewedProductIds.mockResolvedValue(new Set(["p2"]))
+    await renderOrder(order)
+
+    expect(listReviewedProductIds).toHaveBeenCalledExactlyOnceWith("user-1", ["p1", "p2"])
+    const items = screen.getByRole("list", { name: "Items" })
+    expect(within(items).getByRole("link", { name: "Write a review of Aria ANC Wireless Headphones" })).toHaveAttribute(
+      "href",
+      "/products/aria#write-review",
+    )
+    expect(within(items).getByRole("link", { name: "Edit your review of Canvas Tote" })).toHaveAttribute(
+      "href",
+      "/products/tote#write-review",
+    )
+  })
+
+  it("offers no review link for a deleted product's line", async () => {
+    await renderOrder(makeOrderDetail({ status: "delivered" }))
+
+    expect(listReviewedProductIds).toHaveBeenCalledExactlyOnceWith("user-1", ["p1"])
+    expect(screen.getAllByRole("link", { name: /Write a review|Edit your review/ })).toHaveLength(1)
+    expect(screen.queryByRole("link", { name: /review of Canvas Tote/ })).not.toBeInTheDocument()
+  })
+
+  it.each(["pending", "processing", "shipped", "cancelled", "rejected"] as const)(
+    "offers no review links on a %s order",
+    async (status) => {
+      await renderOrder(makeOrderDetail({ status }))
+
+      expect(listReviewedProductIds).not.toHaveBeenCalled()
+      expect(screen.queryByRole("link", { name: /Write a review|Edit your review/ })).not.toBeInTheDocument()
     },
   )
 

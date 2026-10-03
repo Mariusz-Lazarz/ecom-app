@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Package, Tag } from "lucide-react"
+import { LayoutDashboard, MessageSquareText, Package, Tag } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -10,12 +10,16 @@ export const ADMIN_NAV_LINKS = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/orders", label: "Orders", icon: Package },
   { href: "/admin/products", label: "Products", icon: Tag },
+  { href: "/admin/reviews", label: "Reviews", icon: MessageSquareText },
 ] as const
 
 const isActive = (pathname: string, href: string) =>
   href === "/admin" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`)
 
-/** The admin area's section links; the current section is marked with `aria-current="page"`. */
+/**
+ * The admin area's section links (icons only below `md`, labels kept for screen readers); the current
+ * section is marked with `aria-current="page"`.
+ */
 export function AdminNav() {
   const pathname = usePathname()
 
@@ -33,8 +37,8 @@ export function AdminNav() {
               active ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
             )}
           >
-            <Icon className="hidden size-4 sm:block" />
-            {label}
+            <Icon aria-hidden className="size-4" />
+            <span className="max-md:sr-only">{label}</span>
           </Link>
         )
       })}

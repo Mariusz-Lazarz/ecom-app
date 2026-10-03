@@ -75,17 +75,18 @@ async function mapLimit(items, limit, fn) {
   return results
 }
 
+// rating and review_count are left alone: they are derived from the product's reviews (see the
+// reviews step and db/migrations/007_create_reviews.sql).
 async function upsertProduct(client, product, categoryId, images) {
   const { rows } = await client.query(
     `INSERT INTO products (slug, name, brand, category_id, short_description, description, price_cents,
-                           compare_at_cents, stock, rating, review_count, badge, featured, specs, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, now() - make_interval(days => $15))
+                           compare_at_cents, stock, badge, featured, specs, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now() - make_interval(days => $13))
      ON CONFLICT (slug) DO UPDATE SET
        name = EXCLUDED.name, brand = EXCLUDED.brand, category_id = EXCLUDED.category_id,
        short_description = EXCLUDED.short_description, description = EXCLUDED.description,
        price_cents = EXCLUDED.price_cents, compare_at_cents = EXCLUDED.compare_at_cents,
-       stock = EXCLUDED.stock, rating = EXCLUDED.rating, review_count = EXCLUDED.review_count,
-       badge = EXCLUDED.badge, featured = EXCLUDED.featured, specs = EXCLUDED.specs,
+       stock = EXCLUDED.stock, badge = EXCLUDED.badge, featured = EXCLUDED.featured, specs = EXCLUDED.specs,
        created_at = EXCLUDED.created_at
      RETURNING id`,
     [
@@ -98,8 +99,6 @@ async function upsertProduct(client, product, categoryId, images) {
       product.price,
       product.compareAt,
       product.stock,
-      product.rating,
-      product.reviewCount,
       product.badge,
       product.featured,
       JSON.stringify(product.specs.map(([label, value]) => ({ label, value }))),
