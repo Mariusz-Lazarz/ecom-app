@@ -2,22 +2,12 @@
 // under tsx with the react-server condition (see `db:seed` in package.json), so TypeScript imports work.
 import { canTransition, findPaymentMethod, quoteCheckout } from "../../src/lib/order-rules.ts"
 import { ADMIN } from "./admin.mjs"
-import { CUSTOMER } from "./customer.mjs"
+import { CUSTOMERS } from "./customer.mjs"
 
 const HOUR = 60 * 60 * 1000
 
-const ADDRESS = {
-  fullName: "Test Customer",
-  line1: "123 Market Street",
-  line2: "Apt 4B",
-  city: "San Francisco",
-  postalCode: "94103",
-  country: "US",
-  phone: "+1 415 555 0134",
-}
-
 /**
- * Sample orders for the test customer. Numbers NC-1001…NC-1012 sit below the order number
+ * Sample orders, spread over the test customers (`customer` is a key from CUSTOMERS). Numbers NC-1001…NC-1012 sit below the order number
  * sequence's minimum (10001), so real orders never collide with them, and they identify the
  * seeded orders: every run deletes and re-creates exactly these.
  *
@@ -27,6 +17,7 @@ const ADDRESS = {
 const ORDERS = [
   {
     number: "NC-1001",
+    customer: "anna",
     hoursAgo: 58 * 24,
     shipping: "standard",
     payment: "cards",
@@ -39,6 +30,7 @@ const ORDERS = [
   },
   {
     number: "NC-1002",
+    customer: "ben",
     hoursAgo: 52 * 24,
     shipping: "express",
     payment: "wallets",
@@ -54,6 +46,7 @@ const ORDERS = [
   },
   {
     number: "NC-1003",
+    customer: "chloe",
     hoursAgo: 47 * 24,
     shipping: "standard",
     payment: "pay-later",
@@ -62,6 +55,7 @@ const ORDERS = [
   },
   {
     number: "NC-1004",
+    customer: "anna",
     hoursAgo: 41 * 24,
     shipping: "pickup",
     payment: "gift-cards",
@@ -77,6 +71,7 @@ const ORDERS = [
   },
   {
     number: "NC-1005",
+    customer: "ben",
     hoursAgo: 35 * 24,
     shipping: "next-day",
     payment: "cards",
@@ -88,6 +83,7 @@ const ORDERS = [
   },
   {
     number: "NC-1006",
+    customer: "chloe",
     hoursAgo: 28 * 24,
     shipping: "next-day",
     payment: "wallets",
@@ -103,6 +99,7 @@ const ORDERS = [
   },
   {
     number: "NC-1007",
+    customer: "anna",
     hoursAgo: 21 * 24,
     shipping: "standard",
     payment: "cards",
@@ -115,6 +112,7 @@ const ORDERS = [
   {
     // Under the free-shipping threshold, so standard shipping is charged.
     number: "NC-1008",
+    customer: "ben",
     hoursAgo: 14 * 24,
     shipping: "standard",
     payment: "cards",
@@ -126,6 +124,7 @@ const ORDERS = [
   },
   {
     number: "NC-1009",
+    customer: "chloe",
     hoursAgo: 9 * 24,
     shipping: "express",
     payment: "pay-later",
@@ -140,6 +139,7 @@ const ORDERS = [
   },
   {
     number: "NC-1010",
+    customer: "anna",
     hoursAgo: 5 * 24,
     shipping: "standard",
     payment: "wallets",
@@ -148,6 +148,7 @@ const ORDERS = [
   },
   {
     number: "NC-1011",
+    customer: "ben",
     hoursAgo: 2 * 24,
     shipping: "standard",
     payment: "cards",
@@ -156,6 +157,7 @@ const ORDERS = [
   },
   {
     number: "NC-1012",
+    customer: "chloe",
     hoursAgo: 6,
     shipping: "standard",
     payment: "cards",
@@ -190,7 +192,11 @@ async function userId(client, email) {
   return rows[0]?.id ?? null
 }
 
-async function insertOrder(client, spec, { customerId, adminId, products, now }) {
+async function insertOrder(client, spec, { customers, adminId, products, now }) {
+  const customer = customers.get(spec.customer)
+  if (!customer) throw new Error(`order ${spec.number}: unknown customer "${spec.customer}"`)
+  const customerId = customer.id
+  const address = customer.address
   const createdAt = new Date(now - spec.hoursAgo * HOUR)
   const lines = spec.items.map(([slug, quantity]) => {
     const product = products.get(slug)
@@ -221,13 +227,13 @@ async function insertOrder(client, spec, { customerId, adminId, products, now })
       spec.number,
       customerId,
       last.status,
-      ADDRESS.fullName,
-      ADDRESS.line1,
-      ADDRESS.line2,
-      ADDRESS.city,
-      ADDRESS.postalCode,
-      ADDRESS.country,
-      ADDRESS.phone,
+      `${customer.firstName} ${customer.lastName}`,
+      address.line1,
+      address.line2,
+      address.city,
+      address.postalCode,
+      address.country,
+      address.phone,
       quote.shippingMethod.id,
       quote.shippingMethod.name,
       quote.shippingMethodPriceCents,
@@ -277,14 +283,18 @@ async function insertOrder(client, spec, { customerId, adminId, products, now })
 }
 
 /**
- * Replaces the test customer's sample orders (NC-1001…NC-1012): deletes them (items and events go
+ * Replaces the test customers' sample orders (NC-1001…NC-1012): deletes them (items and events go
  * with them) and inserts them again, dated relative to now, with the current product prices.
  * They are history only: seeding never changes product stock, and the products step resets stock
- * anyway. Needs the customer, admin and products steps to have run.
+ * anyway. Needs the customers, admin and products steps to have run.
  */
 export async function seedOrders(client) {
-  const customerId = await userId(client, CUSTOMER.email)
-  if (!customerId) throw new Error(`orders need the test customer ${CUSTOMER.email} (run the customer step first)`)
+  const customers = new Map()
+  for (const customer of CUSTOMERS) {
+    const id = await userId(client, customer.email)
+    if (!id) throw new Error(`orders need the test customer ${customer.email} (run the customers step first)`)
+    customers.set(customer.key, { ...customer, id })
+  }
   const adminId = await userId(client, ADMIN.email)
   const products = await loadProducts(client)
   const now = Date.now()
@@ -293,12 +303,12 @@ export async function seedOrders(client) {
   try {
     await client.query("DELETE FROM orders WHERE number = ANY($1::text[])", [SEEDED_ORDER_NUMBERS])
     for (const spec of ORDERS) {
-      await insertOrder(client, spec, { customerId, adminId, products, now })
+      await insertOrder(client, spec, { customers, adminId, products, now })
     }
     await client.query("COMMIT")
   } catch (err) {
     await client.query("ROLLBACK")
     throw err
   }
-  return `${ORDERS.length} orders for ${CUSTOMER.email} (${SEEDED_ORDER_NUMBERS[0]}…${SEEDED_ORDER_NUMBERS.at(-1)})`
+  return `${ORDERS.length} orders for ${CUSTOMERS.length} customers (${SEEDED_ORDER_NUMBERS[0]}…${SEEDED_ORDER_NUMBERS.at(-1)})`
 }

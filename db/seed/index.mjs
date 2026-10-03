@@ -1,5 +1,5 @@
 import { seedAdmin } from "./admin.mjs"
-import { seedCustomer } from "./customer.mjs"
+import { seedCustomers } from "./customer.mjs"
 import { seedOrders } from "./orders.mjs"
 import { seedProducts } from "./products.mjs"
 
@@ -7,7 +7,7 @@ import { seedProducts } from "./products.mjs"
 // idempotent, and returns a short summary of what it seeded. `orders` needs the steps before it.
 export const steps = [
   { name: "admin", run: seedAdmin },
-  { name: "customer", run: seedCustomer },
+  { name: "customers", run: seedCustomers },
   { name: "products", run: seedProducts },
   { name: "orders", run: seedOrders },
 ]
