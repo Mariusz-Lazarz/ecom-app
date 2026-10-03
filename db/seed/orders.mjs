@@ -6,8 +6,19 @@ import { CUSTOMERS } from "./customer.mjs"
 
 const HOUR = 60 * 60 * 1000
 
+// Where the admin's own sample orders ship to.
+const ADMIN_ADDRESS = {
+  line1: "ul. Floriańska 15",
+  line2: "m. 3",
+  city: "Kraków",
+  postalCode: "31-019",
+  country: "PL",
+  phone: "+48 600 100 200",
+}
+
 /**
- * Sample orders, spread over the test customers (`customer` is a key from CUSTOMERS). Numbers NC-1001…NC-1012 sit below the order number
+ * Sample orders, spread over the test customers and the admin (`customer` is a key from CUSTOMERS, or
+ * "admin" for the admin's own orders, shipped to ADMIN_ADDRESS). Numbers NC-1001…NC-1012 sit below the order number
  * sequence's minimum (10001), so real orders never collide with them, and they identify the
  * seeded orders: every run deletes and re-creates exactly these.
  *
@@ -167,6 +178,55 @@ const ORDERS = [
     ],
     history: [],
   },
+  {
+    number: "NC-1013",
+    customer: "admin",
+    hoursAgo: 40 * 24,
+    shipping: "express",
+    payment: "cards",
+    items: [
+      ["calder-meridian-blue-dial-automatic", 1],
+      ["harbor-leather-full-grain-belt", 1],
+    ],
+    history: [
+      ["processing", 4, "admin"],
+      ["shipped", 20, "admin"],
+      ["delivered", 46, "admin"],
+    ],
+  },
+  {
+    number: "NC-1014",
+    customer: "admin",
+    hoursAgo: 9 * 24,
+    shipping: "standard",
+    payment: "wallets",
+    items: [["polaris-onestep-instant-camera", 1]],
+    history: [
+      ["processing", 6, "admin"],
+      ["shipped", 30, "admin"],
+    ],
+  },
+  {
+    number: "NC-1015",
+    customer: "admin",
+    hoursAgo: 2 * 24,
+    shipping: "next-day",
+    payment: "pay-later",
+    items: [
+      ["sonvik-pulse-pro-true-wireless-earbuds", 1],
+      ["fieldnote-washed-cotton-cap", 1],
+    ],
+    history: [["processing", 3, "admin"]],
+  },
+  {
+    number: "NC-1016",
+    customer: "admin",
+    hoursAgo: 3,
+    shipping: "pickup",
+    payment: "cards",
+    items: [["tern-commuter-backpack-22l", 1]],
+    history: [],
+  },
 ]
 
 export const SEEDED_ORDER_NUMBERS = ORDERS.map((order) => order.number)
@@ -187,9 +247,11 @@ async function loadProducts(client) {
   return bySlug
 }
 
-async function userId(client, email) {
-  const { rows } = await client.query("SELECT id FROM users WHERE lower(email) = $1", [email.toLowerCase()])
-  return rows[0]?.id ?? null
+async function findUser(client, email) {
+  const { rows } = await client.query("SELECT id, first_name, last_name FROM users WHERE lower(email) = $1", [
+    email.toLowerCase(),
+  ])
+  return rows[0] ?? null
 }
 
 async function insertOrder(client, spec, { customers, adminId, products, now }) {
@@ -227,7 +289,7 @@ async function insertOrder(client, spec, { customers, adminId, products, now }) 
       spec.number,
       customerId,
       last.status,
-      `${customer.firstName} ${customer.lastName}`,
+      customer.fullName,
       address.line1,
       address.line2,
       address.city,
@@ -283,19 +345,21 @@ async function insertOrder(client, spec, { customers, adminId, products, now }) 
 }
 
 /**
- * Replaces the test customers' sample orders (NC-1001…NC-1012): deletes them (items and events go
+ * Replaces the sample orders (NC-1001…NC-1016): deletes them (items and events go
  * with them) and inserts them again, dated relative to now, with the current product prices.
  * They are history only: seeding never changes product stock, and the products step resets stock
  * anyway. Needs the customers, admin and products steps to have run.
  */
 export async function seedOrders(client) {
+  // Order owners by key, with the name on their account (the admin's may differ from ADMIN's).
+  const owners = [...CUSTOMERS, { key: "admin", email: ADMIN.email, address: ADMIN_ADDRESS }]
   const customers = new Map()
-  for (const customer of CUSTOMERS) {
-    const id = await userId(client, customer.email)
-    if (!id) throw new Error(`orders need the test customer ${customer.email} (run the customers step first)`)
-    customers.set(customer.key, { ...customer, id })
+  for (const owner of owners) {
+    const user = await findUser(client, owner.email)
+    if (!user) throw new Error(`orders need the account ${owner.email} (run the admin and customers steps first)`)
+    customers.set(owner.key, { ...owner, id: user.id, fullName: `${user.first_name} ${user.last_name}` })
   }
-  const adminId = await userId(client, ADMIN.email)
+  const adminId = customers.get("admin").id
   const products = await loadProducts(client)
   const now = Date.now()
 
@@ -310,5 +374,5 @@ export async function seedOrders(client) {
     await client.query("ROLLBACK")
     throw err
   }
-  return `${ORDERS.length} orders for ${CUSTOMERS.length} customers (${SEEDED_ORDER_NUMBERS[0]}…${SEEDED_ORDER_NUMBERS.at(-1)})`
+  return `${ORDERS.length} orders for ${owners.length} accounts (${SEEDED_ORDER_NUMBERS[0]}…${SEEDED_ORDER_NUMBERS.at(-1)})`
 }
