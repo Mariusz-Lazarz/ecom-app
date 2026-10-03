@@ -3,6 +3,7 @@ import Credentials from "next-auth/providers/credentials"
 import * as z from "zod"
 
 import { logger } from "@/lib/logger"
+import { jwtWithRole, sessionWithRole } from "@/lib/roles"
 import { findUserByEmail, verifyPassword } from "@/lib/users"
 
 const log = logger.child({ scope: "auth" })
@@ -22,6 +23,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     error: (err) => log.error(err.message, { err }),
     warn: (code) => log.warn(`Auth.js warning: ${code}`),
     debug: (message, metadata) => log.debug(message, { metadata }),
+  },
+  callbacks: {
+    jwt: jwtWithRole,
+    session: sessionWithRole,
   },
   events: {
     signIn: ({ user }) => log.info("Signed in", { userId: user.id }),
@@ -46,7 +51,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null
         }
 
-        return { id: user.id, email: user.email, name: `${user.first_name} ${user.last_name}` }
+        return {
+          id: user.id,
+          email: user.email,
+          name: `${user.first_name} ${user.last_name}`,
+          role: user.role,
+        }
       },
     }),
   ],

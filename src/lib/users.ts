@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs"
 
 import { query } from "@/lib/db"
 import { ConflictError } from "@/lib/errors"
+import type { Role } from "@/lib/roles"
 
 const BCRYPT_ROUNDS = 12
 const UNIQUE_VIOLATION = "23505"
@@ -14,6 +15,7 @@ export type User = {
   last_name: string
   email: string
   password_hash: string
+  role: Role
   created_at: Date
 }
 
