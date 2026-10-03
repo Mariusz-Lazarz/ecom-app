@@ -9,6 +9,8 @@ vi.mock("@/auth", () => ({ auth: () => auth() }))
 const getCartCount = vi.fn<() => Promise<number>>()
 vi.mock("server-only", () => ({}))
 vi.mock("@/lib/cart", () => ({ getCartCount: () => getCartCount() }))
+const getWishlistCount = vi.fn<() => Promise<number>>()
+vi.mock("@/lib/wishlist", () => ({ getWishlistCount: () => getWishlistCount() }))
 
 const location = { pathname: "/", search: "" }
 vi.mock("next/navigation", () => ({
@@ -24,6 +26,7 @@ describe("SiteHeader", () => {
   beforeEach(() => {
     auth.mockReset().mockResolvedValue(null)
     getCartCount.mockReset().mockResolvedValue(0)
+    getWishlistCount.mockReset().mockResolvedValue(0)
     location.pathname = "/"
     location.search = ""
   })
@@ -82,6 +85,52 @@ describe("SiteHeader", () => {
 
     expect(screen.getByRole("link", { name: "Cart, 0 items" })).toBeInTheDocument()
     expect(screen.getByRole("link", { name: siteConfig.name })).toBeInTheDocument()
+  })
+
+  it("has no wishlist link for guests", async () => {
+    render(await SiteHeader())
+
+    expect(screen.queryByRole("link", { name: /^Wishlist/ })).not.toBeInTheDocument()
+  })
+
+  it("links a signed-in user's heart to /account/wishlist with the saved count in its name and badge", async () => {
+    auth.mockResolvedValue({ user: { id: "u1", email: "jan@example.com" } })
+    getWishlistCount.mockResolvedValue(3)
+    render(await SiteHeader())
+
+    const link = screen.getByRole("link", { name: "Wishlist, 3 items" })
+    expect(link).toHaveAttribute("href", "/account/wishlist")
+    expect(within(link).getByTestId("wishlist-badge")).toHaveTextContent("3")
+    expect(getWishlistCount).toHaveBeenCalledOnce()
+  })
+
+  it.each([
+    [1, "Wishlist, 1 item", "1"],
+    [120, "Wishlist, 120 items", "99+"],
+  ])("names and caps the wishlist badge (%i saved)", async (count, name, badge) => {
+    auth.mockResolvedValue({ user: { id: "u1" } })
+    getWishlistCount.mockResolvedValue(count)
+    render(await SiteHeader())
+
+    expect(within(screen.getByRole("link", { name })).getByTestId("wishlist-badge")).toHaveTextContent(badge)
+  })
+
+  it("hides the wishlist badge when nothing is saved", async () => {
+    auth.mockResolvedValue({ user: { id: "u1" } })
+    render(await SiteHeader())
+
+    const link = screen.getByRole("link", { name: "Wishlist" })
+    expect(link).toHaveAttribute("href", "/account/wishlist")
+    expect(within(link).queryByTestId("wishlist-badge")).not.toBeInTheDocument()
+  })
+
+  it("still renders, with no wishlist badge, when the count can't be read", async () => {
+    auth.mockResolvedValue({ user: { id: "u1" } })
+    getWishlistCount.mockRejectedValue(new Error("connection refused"))
+    render(await SiteHeader())
+
+    expect(screen.getByRole("link", { name: "Wishlist" })).toBeInTheDocument()
+    expect(screen.queryByTestId("wishlist-badge")).not.toBeInTheDocument()
   })
 
   it("links the account icon to the account page when signed in", async () => {
