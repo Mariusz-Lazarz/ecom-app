@@ -22,7 +22,8 @@ vi.mock("@/app/actions/cart", () => ({
 const notify = { success: vi.fn(), error: vi.fn() }
 vi.mock("@/lib/notify", () => ({ notify }))
 
-const { CheckoutForm } = await import("@/components/checkout/checkout-form")
+const { CheckoutForm, initialAddressChoice } = await import("@/components/checkout/checkout-form")
+type CheckoutAddressOption = import("@/components/checkout/checkout-form").CheckoutAddressOption
 
 const filled: CheckoutValues = {
   fullName: "Ada Lovelace",
@@ -341,5 +342,174 @@ describe("CheckoutForm discount code", () => {
     expect(notice).toHaveTextContent("Discount code removed")
     expect(notice).toHaveTextContent("Add $20.00 more to use it.")
     expect(row("Total")).toHaveTextContent("$15.99")
+  })
+})
+
+describe("CheckoutForm saved addresses", () => {
+  const home = {
+    id: "5f0c6a2e-3b1d-4c7e-9a8b-0c1d2e3f4a5b",
+    label: "Home",
+    fullName: "Ada Lovelace",
+    line1: "12 Analytical Row",
+    line2: "Flat 3",
+    city: "London",
+    postalCode: "EC1A 1BB",
+    country: "GB",
+    phone: "+44 20 7946 0958",
+    isDefault: false,
+  }
+  const office = {
+    ...home,
+    id: "6a1d7b3f-4c2e-4d8f-8b9c-1d2e3f4a5b6c",
+    label: "Office",
+    line1: "1 Engine Street",
+    line2: null,
+    isDefault: true,
+  }
+  const newOnly: CheckoutValues = { fullName: "Ada Lovelace" }
+
+  it("offers the saved addresses with the default preselected and no address form", () => {
+    render(<CheckoutForm cart={makeCart([makeCartItem()])} defaults={newOnly} addresses={[home, office]} canSaveAddress />)
+
+    const picker = screen.getByRole("radiogroup", { name: "Shipping address" })
+    const options = within(picker).getAllByRole("radio")
+    expect(options).toHaveLength(3)
+    expect(within(picker).getByRole("radio", { name: /^Office/ })).toBeChecked()
+    expect(within(picker).getByRole("radio", { name: /^Home/ })).not.toBeChecked()
+    expect(within(picker).getByRole("radio", { name: /^Use a new address/ })).not.toBeChecked()
+    expect(within(picker).getByText("Default")).toBeInTheDocument()
+    expect(picker).toHaveTextContent("12 Analytical Row, Flat 3")
+    expect(picker).toHaveTextContent("EC1A 1BB London, United Kingdom")
+    expect(screen.queryByLabelText("City")).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("Save this address to my account")).not.toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Manage" })).toHaveAttribute("href", "/account/addresses")
+  })
+
+  it("preselects the first address when none is the default", () => {
+    render(<CheckoutForm cart={makeCart([makeCartItem()])} defaults={newOnly} addresses={[home, { ...office, isDefault: false }]} />)
+
+    expect(screen.getByRole("radio", { name: /^Home/ })).toBeChecked()
+  })
+
+  it("posts only the picked address's id with the methods", async () => {
+    const user = userEvent.setup()
+    placeOrder.mockResolvedValue({ message: "Your cart is empty.", values: {} })
+    render(<CheckoutForm cart={makeCart([makeCartItem()])} defaults={newOnly} addresses={[home, office]} canSaveAddress />)
+
+    await user.click(screen.getByRole("radio", { name: /^Home/ }))
+    await user.click(submit())
+
+    await waitFor(() => expect(placeOrder).toHaveBeenCalledOnce())
+    expect(Object.fromEntries(placeOrder.mock.calls[0][1].entries())).toEqual({
+      addressId: home.id,
+      shippingMethodId: "standard",
+      paymentMethodId: "cards",
+    })
+  })
+
+  it("reveals the address form for a new address, with the save checkbox, and posts both", async () => {
+    const user = userEvent.setup()
+    placeOrder.mockResolvedValue({ message: "Your cart is empty.", values: {} })
+    render(<CheckoutForm cart={makeCart([makeCartItem()])} defaults={newOnly} addresses={[office]} canSaveAddress />)
+
+    await user.click(screen.getByRole("radio", { name: /^Use a new address/ }))
+    expect(screen.getByLabelText("Full name")).toHaveValue("Ada Lovelace")
+    const save = screen.getByRole("checkbox", { name: "Save this address to my account" })
+    expect(save).not.toBeChecked()
+    await user.type(screen.getByLabelText("Address"), "7 Difference Lane")
+    await user.type(screen.getByLabelText("City"), "Leeds")
+    await user.type(screen.getByLabelText("Postal code"), "LS1 1AA")
+    await user.type(screen.getByLabelText("Phone"), "+44 113 496 0000")
+    await user.click(save)
+    await user.click(submit())
+
+    await waitFor(() => expect(placeOrder).toHaveBeenCalledOnce())
+    expect(Object.fromEntries(placeOrder.mock.calls[0][1].entries())).toEqual({
+      addressId: "new",
+      fullName: "Ada Lovelace",
+      line1: "7 Difference Lane",
+      line2: "",
+      city: "Leeds",
+      postalCode: "LS1 1AA",
+      country: "US",
+      phone: "+44 113 496 0000",
+      saveAddress: "on",
+      shippingMethodId: "standard",
+      paymentMethodId: "cards",
+    })
+  })
+
+  it("doesn't post saveAddress when the box is left unticked", async () => {
+    const user = userEvent.setup()
+    placeOrder.mockResolvedValue({ message: "Your cart is empty.", values: {} })
+    render(<CheckoutForm cart={makeCart([makeCartItem()])} defaults={filled} canSaveAddress />)
+
+    // Without saved addresses there's no picker: the form is the address.
+    expect(screen.queryByRole("radiogroup", { name: "Shipping address" })).not.toBeInTheDocument()
+    expect(screen.getByRole("checkbox", { name: "Save this address to my account" })).toBeInTheDocument()
+    await user.click(submit())
+
+    await waitFor(() => expect(placeOrder).toHaveBeenCalledOnce())
+    const sent = placeOrder.mock.calls[0][1]
+    expect(sent.has("saveAddress")).toBe(false)
+    expect(sent.has("addressId")).toBe(false)
+  })
+
+  it("hides the save checkbox at the address limit", async () => {
+    const user = userEvent.setup()
+    render(<CheckoutForm cart={makeCart([makeCartItem()])} defaults={newOnly} addresses={[office]} canSaveAddress={false} />)
+
+    await user.click(screen.getByRole("radio", { name: /^Use a new address/ }))
+
+    expect(screen.getByLabelText("City")).toBeInTheDocument()
+    expect(screen.queryByRole("checkbox", { name: "Save this address to my account" })).not.toBeInTheDocument()
+  })
+
+  it("keeps a new address, its errors and the ticked box after a failed submit", async () => {
+    const user = userEvent.setup()
+    placeOrder.mockResolvedValue({
+      message: "Please check the highlighted fields.",
+      errors: { city: ["City is required."] },
+      values: { ...filled, city: "", addressId: "new", saveAddress: "on", shippingMethodId: "standard", paymentMethodId: "cards" },
+    })
+    render(<CheckoutForm cart={makeCart([makeCartItem()])} defaults={newOnly} addresses={[office]} canSaveAddress />)
+
+    await user.click(screen.getByRole("radio", { name: /^Use a new address/ }))
+    await user.click(submit())
+
+    expect(await screen.findByText("City is required.")).toBeInTheDocument()
+    expect(screen.getByRole("radio", { name: /^Use a new address/ })).toBeChecked()
+    expect(screen.getByLabelText("Address")).toHaveValue("12 Analytical Row")
+    expect(screen.getByRole("checkbox", { name: "Save this address to my account" })).toBeChecked()
+  })
+
+  it("shows why a picked address was refused and keeps the choice", async () => {
+    const user = userEvent.setup()
+    const message = "That address is no longer saved. Pick another one or enter a new address."
+    placeOrder.mockResolvedValue({ message, errors: { addressId: [message] }, values: { addressId: home.id } })
+    render(<CheckoutForm cart={makeCart([makeCartItem()])} defaults={newOnly} addresses={[home, office]} />)
+
+    await user.click(screen.getByRole("radio", { name: /^Home/ }))
+    await user.click(submit())
+
+    expect(await screen.findAllByText(message)).not.toHaveLength(0)
+    expect(screen.getByRole("radiogroup", { name: "Shipping address" })).toHaveAttribute("aria-invalid", "true")
+    expect(screen.getByRole("radio", { name: /^Home/ })).toBeChecked()
+  })
+})
+
+describe("initialAddressChoice", () => {
+  const a = { id: "a", isDefault: false } as CheckoutAddressOption
+  const b = { id: "b", isDefault: true } as CheckoutAddressOption
+
+  it.each([
+    ["the default without a posted choice", [a, b], undefined, "b"],
+    ["the first when none is the default", [a, { ...b, isDefault: false }], undefined, "a"],
+    ["a new address without saved ones", [], undefined, "new"],
+    ["the posted saved address", [a, b], "a", "a"],
+    ["a posted new address", [a, b], "new", "new"],
+    ["the default when the posted one is gone", [a, b], "deleted", "b"],
+  ])("picks %s", (_case, addresses, posted, expected) => {
+    expect(initialAddressChoice(addresses, posted)).toBe(expected)
   })
 })

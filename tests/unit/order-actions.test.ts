@@ -8,6 +8,11 @@ const orders = vi.hoisted(() => ({
   cancelOrderAsCustomer: vi.fn(),
   changeOrderStatus: vi.fn(),
 }))
+const addresses = vi.hoisted(() => ({
+  getAddress: vi.fn(),
+  listAddresses: vi.fn(),
+  createAddress: vi.fn(),
+}))
 const flash = vi.fn()
 const refresh = vi.fn()
 const revalidatePath = vi.fn()
@@ -17,6 +22,7 @@ const redirect = vi.fn((url: string) => {
 
 vi.mock("@/auth", () => ({ auth: async () => session.current }))
 vi.mock("@/lib/orders", () => orders)
+vi.mock("@/lib/addresses", () => addresses)
 vi.mock("@/lib/flash", () => ({ flash: (...args: unknown[]) => flash(...args) }))
 vi.mock("next/cache", () => ({
   refresh: () => refresh(),
@@ -53,6 +59,7 @@ function form(fields: Record<string, string | undefined>) {
 beforeEach(() => {
   asGuest()
   for (const fn of Object.values(orders)) fn.mockReset()
+  for (const fn of Object.values(addresses)) fn.mockReset()
   flash.mockReset()
   refresh.mockReset()
   revalidatePath.mockReset()
@@ -127,6 +134,140 @@ describe("placeOrder action", () => {
 
     expect(state?.message).toBe("Something went wrong. Please try again.")
     expect(redirect).not.toHaveBeenCalled()
+  })
+})
+
+describe("placeOrder action with saved addresses", () => {
+  const ADDRESS_ID = "5f0c6a2e-3b1d-4c7e-9a8b-0c1d2e3f4a5b"
+  const saved = {
+    id: ADDRESS_ID,
+    label: "Home",
+    fullName: "Grace Hopper",
+    line1: "1 Navy Way",
+    line2: null,
+    city: "Arlington",
+    postalCode: "22202",
+    country: "US",
+    phone: "+1 703 555 0100",
+    isDefault: true,
+  }
+  const methods = { shippingMethodId: "standard", paymentMethodId: "wallets" }
+
+  it("ships to the picked saved address, ignoring any posted address fields", async () => {
+    asUser()
+    addresses.getAddress.mockResolvedValue(saved)
+    orders.placeOrder.mockResolvedValue({ id: "order-1", number: "NC-10042" })
+
+    await expect(
+      placeOrder(undefined, form({ ...address, addressId: ADDRESS_ID, saveAddress: "on" })),
+    ).rejects.toMatchObject({ digest: "NEXT_REDIRECT;replace;/orders/NC-10042;307;" })
+
+    expect(addresses.getAddress).toHaveBeenCalledExactlyOnceWith(USER_ID, ADDRESS_ID)
+    expect(orders.placeOrder).toHaveBeenCalledExactlyOnceWith(USER_ID, {
+      fullName: "Grace Hopper",
+      line1: "1 Navy Way",
+      line2: null,
+      city: "Arlington",
+      postalCode: "22202",
+      country: "US",
+      phone: "+1 703 555 0100",
+      ...methods,
+    })
+    // An existing address is never saved again, even with the checkbox posted.
+    expect(addresses.createAddress).not.toHaveBeenCalled()
+    expect(flash).toHaveBeenCalledExactlyOnceWith({
+      type: "success",
+      title: "Order placed",
+      description: "Thanks! Your order NC-10042 is confirmed.",
+    })
+  })
+
+  it.each([
+    ["someone else's or a deleted address", ADDRESS_ID, 1],
+    ["a malformed id", "not-a-uuid", 0],
+  ])("refuses %s without placing the order", async (_case, addressId, lookups) => {
+    asUser()
+    addresses.getAddress.mockResolvedValue(null)
+
+    const state = await placeOrder(undefined, form({ ...methods, addressId }))
+
+    const message = "That address is no longer saved. Pick another one or enter a new address."
+    expect(state).toEqual({ errors: { addressId: [message] }, message, values: { ...methods, addressId } })
+    expect(addresses.getAddress).toHaveBeenCalledTimes(lookups)
+    expect(orders.placeOrder).not.toHaveBeenCalled()
+    expect(refresh).toHaveBeenCalledOnce()
+  })
+
+  it("uses the posted fields for a new address and doesn't save it without the checkbox", async () => {
+    asUser()
+    orders.placeOrder.mockResolvedValue({ id: "order-1", number: "NC-10042" })
+
+    await expect(placeOrder(undefined, form({ ...address, addressId: "new" }))).rejects.toMatchObject({
+      digest: "NEXT_REDIRECT;replace;/orders/NC-10042;307;",
+    })
+
+    expect(addresses.getAddress).not.toHaveBeenCalled()
+    expect(orders.placeOrder).toHaveBeenCalledExactlyOnceWith(USER_ID, { ...address, line2: null, postalCode: "EC1A 1BB" })
+    expect(addresses.createAddress).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ["Home for the first saved address", [], "Home"],
+    ["the city for later ones", [saved], "London"],
+  ])("saves a new address after the order when asked, labelled %s", async (_case, existing, label) => {
+    asUser()
+    orders.placeOrder.mockResolvedValue({ id: "order-1", number: "NC-10042" })
+    addresses.listAddresses.mockResolvedValue(existing)
+    addresses.createAddress.mockResolvedValue({})
+
+    await expect(placeOrder(undefined, form({ ...address, addressId: "new", saveAddress: "on" }))).rejects.toMatchObject({
+      digest: "NEXT_REDIRECT;replace;/orders/NC-10042;307;",
+    })
+
+    expect(addresses.createAddress).toHaveBeenCalledExactlyOnceWith(USER_ID, {
+      label,
+      fullName: "Ada Lovelace",
+      line1: "12 Analytical Row",
+      line2: null,
+      city: "London",
+      postalCode: "EC1A 1BB",
+      country: "GB",
+      phone: "+44 20 7946 0958",
+    })
+    expect(orders.placeOrder.mock.invocationCallOrder[0]).toBeLessThan(addresses.createAddress.mock.invocationCallOrder[0])
+    expect(flash).toHaveBeenCalledExactlyOnceWith({
+      type: "success",
+      title: "Order placed",
+      description: "Thanks! Your order NC-10042 is confirmed. The address was saved to your account.",
+    })
+  })
+
+  it("keeps the order when saving the address fails, and says why in the toast", async () => {
+    asUser()
+    orders.placeOrder.mockResolvedValue({ id: "order-1", number: "NC-10042" })
+    addresses.listAddresses.mockResolvedValue([saved])
+    addresses.createAddress.mockRejectedValue(new ConflictError("You can save up to 10 addresses. Delete one to add another."))
+
+    await expect(placeOrder(undefined, form({ ...address, saveAddress: "on" }))).rejects.toMatchObject({
+      digest: "NEXT_REDIRECT;replace;/orders/NC-10042;307;",
+    })
+
+    expect(flash).toHaveBeenCalledExactlyOnceWith({
+      type: "success",
+      title: "Order placed",
+      description:
+        "Thanks! Your order NC-10042 is confirmed. We couldn't save the address: You can save up to 10 addresses. Delete one to add another.",
+    })
+  })
+
+  it("doesn't save the address when the order fails", async () => {
+    asUser()
+    orders.placeOrder.mockRejectedValue(new ConflictError("Your cart is empty."))
+
+    const state = await placeOrder(undefined, form({ ...address, saveAddress: "on" }))
+
+    expect(state).toEqual({ message: "Your cart is empty.", values: { ...address, saveAddress: "on" } })
+    expect(addresses.createAddress).not.toHaveBeenCalled()
   })
 })
 
