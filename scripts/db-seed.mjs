@@ -1,5 +1,8 @@
 // Runs every seed step from db/seed/index.mjs in order. Steps are idempotent (upserts),
 // so re-running this is safe. Run `npm run db:migrate` first.
+//
+// `npm run db:seed` runs this under tsx with the react-server export condition, so steps can import
+// app modules from src/ (TypeScript, `@/` paths, `server-only`) instead of duplicating them.
 import pg from "pg"
 
 import { steps } from "../db/seed/index.mjs"
