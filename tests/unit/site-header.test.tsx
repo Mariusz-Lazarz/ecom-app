@@ -91,6 +91,43 @@ describe("SiteHeader", () => {
     expect(screen.getByRole("link", { name: "Account" })).toHaveAttribute("href", "/account")
   })
 
+  it("shows an Admin link to /admin for admins only", async () => {
+    auth.mockResolvedValue({ user: { id: "u1", email: "admin@example.com", role: "admin" } })
+    const { unmount } = render(await SiteHeader())
+    expect(within(screen.getByRole("banner")).getByRole("link", { name: "Admin" })).toHaveAttribute("href", "/admin")
+    unmount()
+
+    auth.mockResolvedValue({ user: { id: "u2", email: "jan@example.com", role: "user" } })
+    const user = render(await SiteHeader())
+    expect(screen.queryByRole("link", { name: "Admin" })).not.toBeInTheDocument()
+    user.unmount()
+
+    auth.mockResolvedValue(null)
+    render(await SiteHeader())
+    expect(screen.queryByRole("link", { name: "Admin" })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ["an admin", { user: { id: "u1", role: "admin" } }, true],
+    ["a customer", { user: { id: "u2", role: "user" } }, false],
+    ["a guest", null, false],
+  ])("lists the Admin link in the mobile menu only for an admin (%s)", async (_who, session, shown) => {
+    auth.mockResolvedValue(session)
+    const user = userEvent.setup()
+    render(await SiteHeader())
+
+    await user.click(screen.getByRole("button", { name: "Open menu" }))
+    const dialog = await screen.findByRole("dialog", { name: siteConfig.name })
+    const hrefs = within(dialog)
+      .getAllByRole("link")
+      .map((link) => link.getAttribute("href"))
+    expect(hrefs).toEqual([...navLinks.map((l) => l.href), ...(shown ? ["/admin"] : [])])
+    if (shown) {
+      await user.click(within(dialog).getByRole("link", { name: "Admin" }))
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
+    }
+  })
+
   it("exposes search as a collapsed toggle button rather than a link", async () => {
     render(await SiteHeader())
 
