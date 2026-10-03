@@ -3,6 +3,7 @@ import "server-only"
 import type { PoolClient } from "pg"
 
 import { query, withTransaction } from "@/lib/db"
+import { DiscountCodeError, loadDiscountCode } from "@/lib/discounts"
 import { BadRequestError, ConflictError, NotFoundError } from "@/lib/errors"
 import { logger } from "@/lib/logger"
 import {
@@ -11,8 +12,10 @@ import {
   RESTOCKING_STATUSES,
   canCustomerCancel,
   canTransition,
+  checkDiscountCode,
   findPaymentMethod,
   quoteCheckout,
+  type DiscountRule,
   type OrderStatus,
 } from "@/lib/order-rules"
 import { escapeLike } from "@/lib/products"
@@ -24,13 +27,14 @@ import { DEFAULT_ORDERS_PAGE_SIZE, MAX_ORDERS_PAGE_SIZE } from "@/lib/validation
  * Orders: placing one from the signed-in user's cart, reading them (customer and admin views) and
  * moving them through the statuses in `ORDER_TRANSITIONS` (`@/lib/order-rules`).
  *
- * Orders snapshot everything at purchase time. Every status change, including the initial
- * `pending`, is recorded in `order_status_events`. Moving to `cancelled` or `rejected` puts the
- * items back in stock.
+ * Orders snapshot everything at purchase time, including the discount code and what it took off.
+ * Every status change, including the initial `pending`, is recorded in `order_status_events`.
+ * Moving to `cancelled` or `rejected` puts the items back in stock and deletes the order's
+ * discount redemption, so the code's limits count it no more.
  *
- * Locking: `placeOrder` locks the user's cart row, then the products (by id); status changes lock
- * the order row, then its products (by id). Products are always locked in id order, so the two
- * can't deadlock each other.
+ * Locking: `placeOrder` locks the user's cart row, then the products (by id), then the cart's
+ * discount code; status changes lock the order row, then its products (by id). Products are always
+ * locked in id order, so the two can't deadlock each other.
  *
  * None of these read the session: callers (Server Actions, pages) pass the user id and check roles.
  */
@@ -84,6 +88,9 @@ export type OrderSummary = {
   // Sum of quantities.
   itemCount: number
   totalCents: number
+  // The discount code used, if any, and what it took off the subtotal.
+  discountCode: string | null
+  discountCents: number
   currency: string
   createdAt: Date
   updatedAt: Date
@@ -214,8 +221,13 @@ type LockedProduct = {
  * the initial event, and empties the cart. A second submit of the same cart waits for the first
  * and then finds the cart empty.
  *
+ * When the cart holds a discount code, the code row is locked and checked again against the live
+ * subtotal and redemption counts (so two checkouts racing for a code's last use can't both get
+ * it), the order is charged with it, a redemption is written and the code leaves the cart.
+ *
  * @throws EmptyCartError when the cart is empty (or there is none).
  * @throws InsufficientStockError when a line is out of stock or asks for more than is left.
+ * @throws DiscountCodeError when the cart's code can no longer be used. Nothing was written.
  * @throws BadRequestError for an unknown shipping or payment method.
  */
 export async function placeOrder(userId: string, input: CheckoutInput): Promise<{ id: string; number: string }> {
@@ -226,9 +238,10 @@ export async function placeOrder(userId: string, input: CheckoutInput): Promise<
 
   const order = await withTransaction(async (client) => {
     // The cart row lock serialises concurrent checkouts of the same cart (double submit).
-    const { rows: carts } = await client.query<{ id: string }>("SELECT id FROM carts WHERE user_id = $1 FOR UPDATE", [
-      userId,
-    ])
+    const { rows: carts } = await client.query<{ id: string; discount_code: string | null }>(
+      "SELECT id, discount_code FROM carts WHERE user_id = $1 FOR UPDATE",
+      [userId],
+    )
     const cartId = carts[0]?.id
     if (!cartId) throw new EmptyCartError()
 
@@ -272,7 +285,16 @@ export async function placeOrder(userId: string, input: CheckoutInput): Promise<
         compareAtCents: product.compare_at_cents,
       }
     })
-    const quote = quoteCheckout({ items }, input.shippingMethodId)
+    const discountCode = carts[0].discount_code
+    let discount: { id: string; rule: DiscountRule } | null = null
+    if (discountCode) {
+      const code = await loadDiscountCode(discountCode, userId, { client, lock: true })
+      const subtotalCents = quoteCheckout({ items }, input.shippingMethodId).subtotalCents
+      const check = checkDiscountCode(code, subtotalCents)
+      if (!check.ok) throw new DiscountCodeError(discountCode, check.problem, items[0].product.currency)
+      discount = { id: code!.id, rule: check.rule }
+    }
+    const quote = quoteCheckout({ items }, input.shippingMethodId, discount?.rule ?? null)
 
     const { rows: images } = await client.query<{ product_id: string; storage_key: string }>(
       `SELECT DISTINCT ON (product_id) product_id, storage_key
@@ -293,8 +315,9 @@ export async function placeOrder(userId: string, input: CheckoutInput): Promise<
       `INSERT INTO orders (user_id, full_name, line1, line2, city, postal_code, country, phone,
                            shipping_method_id, shipping_method_name, shipping_method_price_cents,
                            payment_method_id, payment_method_name,
-                           subtotal_cents, savings_cents, shipping_cents, total_cents, currency)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+                           subtotal_cents, savings_cents, discount_code, discount_cents, shipping_cents, total_cents,
+                           currency)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
        RETURNING id, number`,
       [
         userId,
@@ -312,12 +335,21 @@ export async function placeOrder(userId: string, input: CheckoutInput): Promise<
         paymentMethod.name,
         quote.subtotalCents,
         quote.savingsCents,
+        discount?.rule.code ?? null,
+        quote.discountCents,
         quote.shippingCents,
         quote.totalCents,
         items[0].product.currency,
       ],
     )
     const { id: orderId, number } = inserted[0]
+
+    if (discount) {
+      await client.query(
+        "INSERT INTO discount_redemptions (code_id, order_id, user_id, amount_cents) VALUES ($1, $2, $3, $4)",
+        [discount.id, orderId, userId, quote.discountCents + quote.shippingDiscountCents],
+      )
+    }
 
     await client.query(
       `INSERT INTO order_items (order_id, product_id, position, product_name, product_slug, brand, image_key,
@@ -343,12 +375,18 @@ export async function placeOrder(userId: string, input: CheckoutInput): Promise<
     await recordEvent(client, orderId, "pending", { userId, role: "customer" }, null)
 
     await client.query("DELETE FROM cart_items WHERE cart_id = $1", [cartId])
-    await client.query("UPDATE carts SET updated_at = now() WHERE id = $1", [cartId])
+    await client.query("UPDATE carts SET discount_code = NULL, updated_at = now() WHERE id = $1", [cartId])
 
-    return { id: orderId, number, totalCents: quote.totalCents, lines: items.length }
+    return { id: orderId, number, totalCents: quote.totalCents, lines: items.length, discountCode: discount?.rule.code }
   })
 
-  log.info("Order placed", { orderNumber: order.number, userId, totalCents: order.totalCents, lines: order.lines })
+  log.info("Order placed", {
+    orderNumber: order.number,
+    userId,
+    totalCents: order.totalCents,
+    lines: order.lines,
+    discountCode: order.discountCode,
+  })
   return { id: order.id, number: order.number }
 }
 
@@ -374,6 +412,8 @@ type SummaryRow = {
   status: OrderStatus
   item_count: number
   total_cents: number
+  discount_code: string | null
+  discount_cents: number
   currency: string
   created_at: Date
   updated_at: Date
@@ -388,7 +428,7 @@ type AdminSummaryRow = SummaryRow & {
 }
 
 const SUMMARY_COLUMNS = `
-  o.id, o.number, o.status, o.total_cents, o.currency, o.created_at, o.updated_at,
+  o.id, o.number, o.status, o.total_cents, o.discount_code, o.discount_cents, o.currency, o.created_at, o.updated_at,
   (SELECT COALESCE(SUM(quantity), 0)::int FROM order_items WHERE order_id = o.id) AS item_count`
 
 function toSummary(row: SummaryRow): OrderSummary {
@@ -398,6 +438,8 @@ function toSummary(row: SummaryRow): OrderSummary {
     status: row.status,
     itemCount: row.item_count,
     totalCents: row.total_cents,
+    discountCode: row.discount_code,
+    discountCents: row.discount_cents,
     currency: row.currency,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -716,7 +758,11 @@ async function applyTransition(
     change.status,
     trackingNumber,
   ])
-  if (RESTOCKING_STATUSES.includes(change.status)) await restock(client, order.id)
+  if (RESTOCKING_STATUSES.includes(change.status)) {
+    await restock(client, order.id)
+    // The order no longer counts towards its discount code's limits; it keeps its snapshot.
+    await client.query("DELETE FROM discount_redemptions WHERE order_id = $1", [order.id])
+  }
   await recordEvent(client, order.id, change.status, actor, change.note ?? null)
 
   return { number: order.number, status: change.status, previousStatus: order.status, trackingNumber }
@@ -725,7 +771,8 @@ async function applyTransition(
 /**
  * Moves an order to a new status (admin). The order row is locked first, so of two concurrent
  * changes the second sees the first's result and is checked against it. Cancelling or rejecting
- * restocks the items; `shipped` stores the tracking number when one is given.
+ * restocks the items and frees the discount code use; `shipped` stores the tracking number when
+ * one is given.
  *
  * @throws NotFoundError when there's no such order.
  * @throws InvalidTransitionError when `ORDER_TRANSITIONS` doesn't allow the change.
@@ -745,7 +792,8 @@ export async function changeOrderStatus(
 }
 
 /**
- * Cancels the user's own order while it's still `pending`, restocking its items.
+ * Cancels the user's own order while it's still `pending`, restocking its items and freeing its
+ * discount code use.
  *
  * @throws NotFoundError when there's no such order or it belongs to someone else.
  * @throws InvalidTransitionError when the order is past `pending`.

@@ -210,6 +210,8 @@ describe("AdminNav", () => {
     ["/admin/products", "Products"],
     ["/admin/products/new", "Products"],
     ["/admin/reviews", "Reviews"],
+    ["/admin/discounts", "Discounts"],
+    ["/admin/discounts/new", "Discounts"],
   ])("on %s marks %s as the current section", (path, current) => {
     pathname.current = path
     render(<AdminNav />)
@@ -220,6 +222,7 @@ describe("AdminNav", () => {
       ["Orders", "/admin/orders"],
       ["Products", "/admin/products"],
       ["Reviews", "/admin/reviews"],
+      ["Discounts", "/admin/discounts"],
     ])
     expect(links.filter((l) => l.getAttribute("aria-current") === "page").map((l) => l.textContent)).toEqual([current])
   })

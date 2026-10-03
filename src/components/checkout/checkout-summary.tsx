@@ -1,13 +1,18 @@
 import Image from "next/image"
 import { ImageOff } from "lucide-react"
 
+import { DiscountCodeField } from "@/components/discounts/discount-code-field"
+import { DiscountRow } from "@/components/discounts/discount-row"
 import { Separator } from "@/components/ui/separator"
 import type { Cart } from "@/lib/cart"
 import { formatPrice } from "@/lib/catalogue"
 import type { CheckoutQuote } from "@/lib/order-rules"
 import { cn } from "@/lib/utils"
 
-/** The checkout's order summary: each line with its thumbnail, then the quote's money rows. */
+/**
+ * The checkout's order summary: each line with its thumbnail, the discount code field, then the
+ * quote's money rows (with a "Discount (CODE)" line when a code applies).
+ */
 export function CheckoutSummary({ cart, quote }: { cart: Cart; quote: CheckoutQuote }) {
   const currency = cart.currency
   return (
@@ -53,6 +58,8 @@ export function CheckoutSummary({ cart, quote }: { cart: Cart; quote: CheckoutQu
 
       <Separator />
 
+      <DiscountCodeField applied={cart.discount ?? null} currency={currency} />
+
       <dl aria-label="Order totals" className="space-y-2 text-sm">
         <div className="flex justify-between gap-4">
           <dt className="text-muted-foreground">Subtotal</dt>
@@ -63,6 +70,9 @@ export function CheckoutSummary({ cart, quote }: { cart: Cart; quote: CheckoutQu
             <dt>You save</dt>
             <dd className="font-medium tabular-nums">−{formatPrice(quote.savingsCents, currency)}</dd>
           </div>
+        )}
+        {quote.discount && (
+          <DiscountRow code={quote.discount.code} discountCents={quote.discountCents} currency={currency} />
         )}
         <div className="flex justify-between gap-4">
           <dt className="text-muted-foreground">Shipping ({quote.shippingMethod.name})</dt>

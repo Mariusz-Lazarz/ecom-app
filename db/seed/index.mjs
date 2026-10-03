@@ -1,5 +1,6 @@
 import { seedAdmin } from "./admin.mjs"
 import { seedCustomers } from "./customer.mjs"
+import { seedDiscounts } from "./discounts.mjs"
 import { seedOrders } from "./orders.mjs"
 import { seedProducts } from "./products.mjs"
 import { seedReviews } from "./reviews.mjs"
@@ -13,4 +14,5 @@ export const steps = [
   { name: "products", run: seedProducts },
   { name: "orders", run: seedOrders },
   { name: "reviews", run: seedReviews },
+  { name: "discounts", run: seedDiscounts },
 ]
