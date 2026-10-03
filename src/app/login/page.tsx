@@ -6,14 +6,18 @@ import { LoginForm } from "@/components/auth/login-form"
 import { SiteFooter } from "@/components/site-footer"
 import { SiteHeader } from "@/components/site-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { CALLBACK_PARAM, safeCallbackPath } from "@/lib/safe-redirect"
 
 export const metadata: Metadata = {
   title: "Sign in — Northcart",
 }
 
-export default async function LoginPage() {
+export default async function LoginPage({ searchParams }: PageProps<"/login">) {
+  // Where to go after signing in, e.g. back to /checkout; only same-origin paths are kept.
+  const callbackUrl = safeCallbackPath((await searchParams)[CALLBACK_PARAM])
+
   // Already signed in: nothing to do here.
-  if (await auth()) redirect("/")
+  if (await auth()) redirect(callbackUrl ?? "/")
 
   return (
     <>
@@ -25,7 +29,7 @@ export default async function LoginPage() {
             <CardDescription>Sign in to your Northcart account.</CardDescription>
           </CardHeader>
           <CardContent>
-            <LoginForm />
+            <LoginForm callbackUrl={callbackUrl} />
           </CardContent>
         </Card>
       </main>

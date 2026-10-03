@@ -83,7 +83,22 @@ describe("CartSheet mini-cart", () => {
     expect(within(dialog).getByText("You save").nextElementSibling).toHaveTextContent("−$10.00")
     expect(within(dialog).getByText(/away from free shipping/)).toHaveTextContent("$20.00 away from free shipping")
     expect(within(dialog).getByRole("link", { name: "Go to cart" })).toHaveAttribute("href", "/cart")
-    expect(within(dialog).getByRole("button", { name: "Checkout (coming soon)" })).toBeDisabled()
+    expect(within(dialog).getByRole("link", { name: "Checkout" })).toHaveAttribute("href", "/checkout")
+  })
+
+  it("closes when the checkout link is followed", async () => {
+    const user = userEvent.setup()
+    serve(makeCart([makeCartItem({ name: "Aria" })]))
+    render(<CartSheet count={1} />)
+
+    await user.click(screen.getByRole("link", { name: "Cart, 1 item" }))
+    const dialog = await screen.findByRole("dialog", { name: "Your cart (1)" })
+    const checkout = within(dialog).getByRole("link", { name: "Checkout" })
+    // jsdom can't navigate; only the sheet closing is under test.
+    checkout.addEventListener("click", (event) => event.preventDefault())
+    await user.click(checkout)
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument())
   })
 
   it("shows the empty state with a link to the products", async () => {

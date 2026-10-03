@@ -1,10 +1,13 @@
 import type { Metadata } from "next"
+import Link from "next/link"
+import { ChevronRight, Package } from "lucide-react"
 
 import { logout } from "@/app/actions/logout"
 import { SiteFooter } from "@/components/site-footer"
 import { SiteHeader } from "@/components/site-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 import { requireUser } from "@/lib/auth-guards"
 
 export const metadata: Metadata = {
@@ -28,6 +31,20 @@ export default async function AccountPage() {
           </h1>
           {session.user.role === "admin" && <Badge>Admin</Badge>}
         </div>
+        <Card className="w-full max-w-md transition-colors hover:bg-muted/50">
+          <CardContent>
+            <Link href="/account/orders" className="flex items-center gap-3">
+              <span className="flex size-10 items-center justify-center rounded-full bg-muted">
+                <Package className="size-5" />
+              </span>
+              <span className="flex-1">
+                <span className="block font-medium">Your orders</span>
+                <span className="block text-sm text-muted-foreground">Track, review or cancel your orders</span>
+              </span>
+              <ChevronRight className="size-4 text-muted-foreground" />
+            </Link>
+          </CardContent>
+        </Card>
         <form action={logout}>
           <Button type="submit" variant="outline">
             Log out

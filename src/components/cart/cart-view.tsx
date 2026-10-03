@@ -86,7 +86,7 @@ export function CartView({ cart }: { cart: Cart }) {
         </CardHeader>
         <CardContent className="space-y-4">
           <CartTotals cart={current} />
-          <CheckoutButton />
+          <CheckoutButton cart={current} />
         </CardContent>
       </Card>
     </div>

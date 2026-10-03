@@ -1,12 +1,13 @@
 "use client"
 
 import Link from "next/link"
-import { ShoppingCart, Truck } from "lucide-react"
+import { useId } from "react"
+import { ArrowRight, ShoppingCart, Truck } from "lucide-react"
 
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import type { Cart } from "@/lib/cart"
-import { freeShippingProgress } from "@/lib/cart-state"
+import { checkoutBlocker, freeShippingProgress } from "@/lib/cart-state"
 import { formatPrice } from "@/lib/catalogue"
 
 /** Subtotal, savings and shipping rows, followed by the progress towards free shipping. */
@@ -59,12 +60,31 @@ export function FreeShippingProgress({ subtotalCents, currency }: { subtotalCent
   )
 }
 
-/** Checkout isn't built yet, so its button stays disabled. */
-export function CheckoutButton() {
+/**
+ * Links to /checkout. Disabled, with the reason underneath, while the cart has lines checkout would
+ * reject (out of stock, or more than is in stock). `onNavigate` runs when the link is followed,
+ * e.g. to close the mini-cart.
+ */
+export function CheckoutButton({ cart, onNavigate }: { cart: Cart; onNavigate?: () => void }) {
+  const blocker = checkoutBlocker(cart)
+  const reasonId = useId()
+  if (blocker) {
+    return (
+      <div className="space-y-2">
+        <Button size="lg" className="h-10 w-full" disabled aria-describedby={reasonId}>
+          Checkout
+        </Button>
+        <p id={reasonId} className="text-center text-xs text-destructive">
+          {blocker}
+        </p>
+      </div>
+    )
+  }
   return (
-    <Button size="lg" className="h-10 w-full" disabled>
-      Checkout (coming soon)
-    </Button>
+    <Link href="/checkout" onClick={onNavigate} className={buttonVariants({ size: "lg", className: "h-10 w-full" })}>
+      Checkout
+      <ArrowRight data-icon="inline-end" />
+    </Link>
   )
 }
 
