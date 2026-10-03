@@ -4,7 +4,7 @@ import * as z from "zod"
 
 import { logger } from "@/lib/logger"
 import { jwtWithRole, sessionWithRole } from "@/lib/roles"
-import { findUserByEmail, verifyPassword } from "@/lib/users"
+import { findUserByEmail, findUserById, verifyPassword } from "@/lib/users"
 
 const log = logger.child({ scope: "auth" })
 
@@ -14,7 +14,15 @@ const CredentialsSchema = z.object({
 })
 
 // Registration and login live in Server Actions (src/app/actions/); Auth.js owns sessions.
-export const { handlers, auth, signIn, signOut } = NextAuth({
+// `updateSession` (Auth.js' `unstable_update`) re-reads the signed-in user's name and email into
+// the JWT, so profile changes show up without signing in again.
+export const {
+  handlers,
+  auth,
+  signIn,
+  signOut,
+  unstable_update: updateSession,
+} = NextAuth({
   session: { strategy: "jwt" },
   // Auth.js only trusts the Host header in dev by default; `next start` (used by e2e) needs this too.
   trustHost: true,
@@ -25,7 +33,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     debug: (message, metadata) => log.debug(message, { metadata }),
   },
   callbacks: {
-    jwt: jwtWithRole,
+    async jwt(params) {
+      const token = jwtWithRole(params)
+      // An update (from `updateSession`, or a client POST to /api/auth/session) never trusts the
+      // data it was sent: the name and email are reloaded from the database.
+      if (params.trigger === "update" && token.sub) {
+        const user = await findUserById(token.sub)
+        if (user) {
+          token.name = `${user.first_name} ${user.last_name}`
+          token.email = user.email
+        }
+      }
+      return token
+    },
     session: sessionWithRole,
   },
   events: {
