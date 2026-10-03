@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, MessageSquareText, Package, Tag } from "lucide-react"
+import { LayoutDashboard, MessageSquareText, Package, Tag, TicketPercent } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -11,6 +11,7 @@ export const ADMIN_NAV_LINKS = [
   { href: "/admin/orders", label: "Orders", icon: Package },
   { href: "/admin/products", label: "Products", icon: Tag },
   { href: "/admin/reviews", label: "Reviews", icon: MessageSquareText },
+  { href: "/admin/discounts", label: "Discounts", icon: TicketPercent },
 ] as const
 
 const isActive = (pathname: string, href: string) =>
