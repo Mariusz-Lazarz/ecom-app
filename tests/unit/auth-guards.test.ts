@@ -98,5 +98,21 @@ describe("auth guards", () => {
       expect(redirect).toHaveBeenCalledExactlyOnceWith("/login")
       expect(notFound).not.toHaveBeenCalled()
     })
+
+    it("sends signed-out visitors back to returnTo after the login", async () => {
+      auth.mockResolvedValue(null)
+
+      await expect(requireAdmin("/admin/orders")).rejects.toMatchObject({
+        digest: "NEXT_REDIRECT;replace;/login?callbackUrl=%2Fadmin%2Forders;307;",
+      })
+      expect(notFound).not.toHaveBeenCalled()
+    })
+
+    it("still 404s a signed-in non-admin when given returnTo", async () => {
+      auth.mockResolvedValue(session("user"))
+
+      await expect(requireAdmin("/admin")).rejects.toMatchObject({ digest: "NEXT_HTTP_ERROR_FALLBACK;404" })
+      expect(redirect).not.toHaveBeenCalled()
+    })
   })
 })
