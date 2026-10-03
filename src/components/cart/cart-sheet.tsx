@@ -142,7 +142,7 @@ function MiniCartBody({ cart, reload, onNavigate }: { cart: Cart; reload: () => 
         <Link href="/cart" onClick={onNavigate} className={buttonVariants({ variant: "outline", size: "lg", className: "h-10 w-full" })}>
           Go to cart
         </Link>
-        <CheckoutButton />
+        <CheckoutButton cart={editor.cart} onNavigate={onNavigate} />
       </SheetFooter>
     </>
   )

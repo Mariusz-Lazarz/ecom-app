@@ -83,9 +83,28 @@ describe("CartView", () => {
     expect(screen.getByRole("progressbar", { name: "Progress to free shipping" })).toHaveAttribute("aria-valuenow", "100")
   })
 
-  it("has a disabled checkout button", () => {
-    render(<CartView cart={makeCart([makeCartItem()])} />)
-    expect(screen.getByRole("button", { name: "Checkout (coming soon)" })).toBeDisabled()
+  it("links to the checkout when every line can be bought", () => {
+    render(<CartView cart={makeCart([makeCartItem({ quantity: 3, stock: 3 })])} />)
+
+    expect(screen.getByRole("link", { name: "Checkout" })).toHaveAttribute("href", "/checkout")
+    expect(screen.queryByRole("button", { name: "Checkout" })).not.toBeInTheDocument()
+  })
+
+  it("disables checkout and says why while a line is out of stock", () => {
+    render(<CartView cart={makeCart([makeCartItem(), makeCartItem({ stock: 0 })])} />)
+
+    const button = screen.getByRole("button", { name: "Checkout" })
+    expect(button).toBeDisabled()
+    expect(button).toHaveAccessibleDescription("Remove the out-of-stock items to check out.")
+    expect(screen.queryByRole("link", { name: "Checkout" })).not.toBeInTheDocument()
+  })
+
+  it("disables checkout and says why while a line asks for more than is in stock", () => {
+    render(<CartView cart={makeCart([makeCartItem({ quantity: 4, stock: 2 })])} />)
+
+    const button = screen.getByRole("button", { name: "Checkout" })
+    expect(button).toBeDisabled()
+    expect(button).toHaveAccessibleDescription("Reduce the quantities to what's in stock to check out.")
   })
 
   it("updates the quantity and totals at once while the change is saved", async () => {

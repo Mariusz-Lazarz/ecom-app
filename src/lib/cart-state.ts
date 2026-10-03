@@ -4,7 +4,8 @@ import { MAX_LINE_QUANTITY } from "@/lib/validation/cart"
 
 /**
  * Client-safe cart helpers: the optimistic updates the cart UI applies while a cart action runs,
- * and the free-shipping figures. The totals follow the same rules as `getCart()` in `@/lib/cart`.
+ * whether the cart can go to checkout, and the free-shipping figures. The totals follow the same
+ * rules as `getCart()` in `@/lib/cart`.
  */
 
 export type CartChange =
@@ -57,6 +58,17 @@ export function applyCartChange(cart: Cart, change: CartChange): Cart {
         cart.currency,
       )
   }
+}
+
+/**
+ * Why the cart can't go to checkout yet, or null when it can. Checkout would reject out-of-stock
+ * lines and lines asking for more than is in stock, so those have to be fixed in the cart first.
+ */
+export function checkoutBlocker(cart: Pick<Cart, "items">): string | null {
+  if (cart.items.length === 0) return "Your cart is empty."
+  if (cart.items.some((item) => !item.available)) return "Remove the out-of-stock items to check out."
+  if (cart.items.some((item) => item.limited)) return "Reduce the quantities to what's in stock to check out."
+  return null
 }
 
 export const FREE_SHIPPING_THRESHOLD_CENTS = Math.round(shippingRules.freeThreshold * 100)

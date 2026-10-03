@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest"
 
-import { applyCartChange, FREE_SHIPPING_THRESHOLD_CENTS, freeShippingProgress, lineLimit, summarize } from "@/lib/cart-state"
+import {
+  applyCartChange,
+  checkoutBlocker,
+  FREE_SHIPPING_THRESHOLD_CENTS,
+  freeShippingProgress,
+  lineLimit,
+  summarize,
+} from "@/lib/cart-state"
 
 import { makeCart, makeCartItem } from "./fixtures/cart"
 
@@ -99,5 +106,26 @@ describe("freeShippingProgress", () => {
   it("unlocks exactly at the threshold and stays at 100% above it", () => {
     expect(freeShippingProgress(5000)).toEqual({ unlocked: true, remainingCents: 0, percent: 100 })
     expect(freeShippingProgress(12000)).toEqual({ unlocked: true, remainingCents: 0, percent: 100 })
+  })
+})
+
+describe("checkoutBlocker", () => {
+  it("lets a cart of buyable lines through, including a line at exactly its stock", () => {
+    expect(checkoutBlocker(makeCart([makeCartItem({ quantity: 2, stock: 2 }), makeCartItem()]))).toBeNull()
+  })
+
+  it("blocks an empty cart", () => {
+    expect(checkoutBlocker(makeCart([]))).toBe("Your cart is empty.")
+  })
+
+  it("blocks out-of-stock lines before over-stock ones", () => {
+    const cart = makeCart([makeCartItem({ quantity: 3, stock: 1 }), makeCartItem({ stock: 0 })])
+    expect(checkoutBlocker(cart)).toBe("Remove the out-of-stock items to check out.")
+  })
+
+  it("blocks a line asking for one more than is in stock", () => {
+    expect(checkoutBlocker(makeCart([makeCartItem({ quantity: 3, stock: 2 })]))).toBe(
+      "Reduce the quantities to what's in stock to check out.",
+    )
   })
 })
