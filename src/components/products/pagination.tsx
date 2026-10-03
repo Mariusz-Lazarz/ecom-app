@@ -1,9 +1,16 @@
-import Link from "next/link"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 
 import { buttonVariants } from "@/components/ui/button"
+import {
+  Pagination as PaginationRoot,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination"
 import { catalogueHref, paginationRange, type CatalogueQuery } from "@/lib/catalogue"
-import { cn } from "@/lib/utils"
 
 type PaginationProps = {
   basePath: string
@@ -11,52 +18,48 @@ type PaginationProps = {
   pageCount: number
 }
 
+/** Page links for the catalogue, keeping the other filters. Previous / Next are disabled at either end. */
 export function Pagination({ basePath, query, pageCount }: PaginationProps) {
   if (pageCount <= 1) return null
   const page = query.page
   const href = (p: number) => catalogueHref(basePath, { ...query, page: p })
-  const disabledClass = "pointer-events-none opacity-50"
+  const disabled = buttonVariants({ variant: "ghost", className: "pointer-events-none opacity-50" })
 
   return (
-    <nav aria-label="Pagination" className="flex flex-wrap items-center justify-center gap-1">
-      {page > 1 ? (
-        <Link href={href(page - 1)} rel="prev" className={buttonVariants({ variant: "ghost" })}>
-          <ChevronLeft /> Previous
-        </Link>
-      ) : (
-        <span aria-disabled className={buttonVariants({ variant: "ghost", className: disabledClass })}>
-          <ChevronLeft /> Previous
-        </span>
-      )}
-      <ul className="flex items-center gap-1">
-        {paginationRange(page, pageCount).map((item, index) => (
-          <li key={item === "ellipsis" ? `ellipsis-${index}` : item}>
-            {item === "ellipsis" ? (
-              <span className="px-2 text-muted-foreground" aria-hidden>
-                …
-              </span>
-            ) : (
-              <Link
-                href={href(item)}
-                aria-label={`Page ${item}`}
-                aria-current={item === page ? "page" : undefined}
-                className={cn(buttonVariants({ variant: item === page ? "outline" : "ghost", size: "icon" }))}
-              >
+    <PaginationRoot aria-label="Pagination">
+      <PaginationContent className="flex-wrap justify-center gap-1">
+        <PaginationItem>
+          {page > 1 ? (
+            <PaginationPrevious href={href(page - 1)} rel="prev" aria-label="Previous page" />
+          ) : (
+            <span aria-disabled className={disabled}>
+              <ChevronLeft /> <span className="hidden sm:block">Previous</span>
+            </span>
+          )}
+        </PaginationItem>
+        {paginationRange(page, pageCount).map((item, index) =>
+          item === "ellipsis" ? (
+            <PaginationItem key={`ellipsis-${index}`}>
+              <PaginationEllipsis />
+            </PaginationItem>
+          ) : (
+            <PaginationItem key={item}>
+              <PaginationLink href={href(item)} aria-label={`Page ${item}`} isActive={item === page}>
                 {item}
-              </Link>
-            )}
-          </li>
-        ))}
-      </ul>
-      {page < pageCount ? (
-        <Link href={href(page + 1)} rel="next" className={buttonVariants({ variant: "ghost" })}>
-          Next <ChevronRight />
-        </Link>
-      ) : (
-        <span aria-disabled className={buttonVariants({ variant: "ghost", className: disabledClass })}>
-          Next <ChevronRight />
-        </span>
-      )}
-    </nav>
+              </PaginationLink>
+            </PaginationItem>
+          ),
+        )}
+        <PaginationItem>
+          {page < pageCount ? (
+            <PaginationNext href={href(page + 1)} rel="next" aria-label="Next page" />
+          ) : (
+            <span aria-disabled className={disabled}>
+              <span className="hidden sm:block">Next</span> <ChevronRight />
+            </span>
+          )}
+        </PaginationItem>
+      </PaginationContent>
+    </PaginationRoot>
   )
 }

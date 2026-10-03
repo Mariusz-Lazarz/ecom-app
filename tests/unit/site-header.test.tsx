@@ -81,7 +81,7 @@ describe("SiteHeader", () => {
     const form = screen.getByRole("search")
     expect(form).toHaveAttribute("action", "/products")
     expect(form.getAttribute("method") ?? "get").toMatch(/^get$/i)
-    const input = within(form).getByRole("searchbox", { name: "Search products" })
+    const input = within(form).getByRole("combobox", { name: "Search products" })
     expect(input).toHaveAttribute("name", "q")
     expect(input).toHaveValue("")
     expect(input).toHaveFocus()
@@ -98,7 +98,7 @@ describe("SiteHeader", () => {
     await user.click(screen.getByRole("button", { name: "Search" }))
 
     const form = screen.getByRole("search")
-    expect(within(form).getByRole("searchbox")).toHaveValue("boots")
+    expect(within(form).getByRole("combobox", { name: "Search products" })).toHaveValue("boots")
     const hidden = [...form.querySelectorAll<HTMLInputElement>('input[type="hidden"]')].map((i) => [i.name, i.value])
     // The page is dropped: a new search starts on page 1.
     expect(hidden).toEqual([

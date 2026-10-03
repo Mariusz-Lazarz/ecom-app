@@ -4,6 +4,7 @@ import Image from "next/image"
 import { useState } from "react"
 import { ImageOff } from "lucide-react"
 
+import { Toggle } from "@/components/ui/toggle"
 import type { ProductImage } from "@/lib/products"
 import { cn } from "@/lib/utils"
 
@@ -37,18 +38,17 @@ export function ProductGallery({ images, productName }: { images: ProductImage[]
         <ul className="grid grid-cols-4 gap-3 sm:grid-cols-5">
           {images.map((image, index) => (
             <li key={image.url}>
-              <button
-                type="button"
-                onClick={() => setSelected(index)}
+              <Toggle
+                pressed={index === selected}
+                onPressedChange={() => setSelected(index)}
                 aria-label={`Show photo ${index + 1} of ${images.length}`}
-                aria-pressed={index === selected}
                 className={cn(
-                  "relative block aspect-square w-full cursor-pointer overflow-hidden rounded-lg bg-muted ring-offset-2 ring-offset-background outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+                  "relative block aspect-square h-auto w-full cursor-pointer overflow-hidden rounded-lg bg-muted p-0 ring-offset-2 ring-offset-background",
                   index === selected ? "ring-2 ring-primary" : "opacity-70 hover:opacity-100",
                 )}
               >
                 <Image src={image.url} alt="" fill sizes="120px" className="object-cover" />
-              </button>
+              </Toggle>
             </li>
           ))}
         </ul>

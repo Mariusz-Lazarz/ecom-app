@@ -1,52 +1,52 @@
 "use client"
 
-import Form from "next/form"
-import { useRef } from "react"
+import { useRouter } from "next/navigation"
+import { useId, useOptimistic, useTransition } from "react"
 
-import { SORT_OPTIONS, type CatalogueQuery } from "@/lib/catalogue"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { catalogueHref, SORT_OPTIONS, type CatalogueQuery } from "@/lib/catalogue"
+import type { ProductSort } from "@/lib/validation/products"
 
 type SortSelectProps = {
   basePath: string
   query: CatalogueQuery
 }
 
-/**
- * A GET form, so sorting works without JavaScript (via the submit button inside <noscript>).
- * With JavaScript it submits as soon as the selection changes. Changing the sort goes back to page 1.
- */
+/** Picking a sort navigates to the same catalogue URL with the new sort, keeping the other filters, on page 1. */
 export function SortSelect({ basePath, query }: SortSelectProps) {
-  const formRef = useRef<HTMLFormElement>(null)
-  const hidden: [string, string | undefined][] = [
-    ["q", query.q],
-    ["category", query.category],
-    ["onSale", query.onSale ? "true" : undefined],
-  ]
+  const router = useRouter()
+  const labelId = useId()
+  // Shows the picked sort straight away, while the sorted page loads.
+  const [sort, setSort] = useOptimistic(query.sort)
+  const [, startTransition] = useTransition()
 
   return (
-    <Form ref={formRef} action={basePath} className="flex items-center gap-2">
-      {hidden.map(([name, value]) => value && <input key={name} type="hidden" name={name} value={value} />)}
-      <label htmlFor="catalogue-sort" className="text-sm whitespace-nowrap text-muted-foreground">
+    <div className="flex items-center gap-2">
+      <span id={labelId} className="text-sm whitespace-nowrap text-muted-foreground">
         Sort by
-      </label>
-      <select
-        key={query.sort}
-        id="catalogue-sort"
-        name="sort"
-        defaultValue={query.sort}
-        onChange={() => formRef.current?.requestSubmit()}
-        className="h-8 rounded-lg border border-input bg-background px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+      </span>
+      <Select<ProductSort>
+        items={SORT_OPTIONS}
+        value={sort}
+        onValueChange={(next) => {
+          if (!next || next === query.sort) return
+          startTransition(() => {
+            setSort(next)
+            router.push(catalogueHref(basePath, { ...query, sort: next, page: 1 }))
+          })
+        }}
       >
-        {SORT_OPTIONS.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-      <noscript>
-        <button type="submit" className="text-sm underline">
-          Apply
-        </button>
-      </noscript>
-    </Form>
+        <SelectTrigger aria-labelledby={labelId} className="min-w-44">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent alignItemWithTrigger={false} align="end">
+          {SORT_OPTIONS.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   )
 }

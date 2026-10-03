@@ -1,10 +1,14 @@
-import { render, screen, within } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import type { ComponentProps } from "react"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { makeProduct } from "./fixtures/products"
 
 vi.mock("@/lib/notify", () => ({ notify: { info: vi.fn() } }))
+
+const push = vi.fn()
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }))
 
 const { Catalogue } = await import("@/components/products/catalogue")
 const { parseCatalogueQuery } = await import("@/lib/catalogue")
@@ -39,6 +43,8 @@ function renderCatalogue(props: Partial<ComponentProps<typeof Catalogue>> & { se
 const hrefOf = (name: string | RegExp) => screen.getByRole("link", { name }).getAttribute("href")
 
 describe("Catalogue", () => {
+  beforeEach(() => push.mockReset())
+
   it("shows the title, the range shown and one card per product", () => {
     const { container } = renderCatalogue({ list: page(12, 28, 2), search: { page: "2" } })
 
@@ -74,13 +80,26 @@ describe("Catalogue", () => {
     expect(screen.getByRole("link", { name: "All" })).not.toHaveAttribute("aria-current")
   })
 
-  it("toggles the sale filter on and off, back to page 1", () => {
-    const { unmount } = renderCatalogue({ search: { sort: "newest", page: "2" }, list: page(1, 13, 2) })
-    expect(hrefOf(/On sale only/)).toBe("/products?sort=newest&onSale=true")
-    unmount()
+  it("turns the sale filter on from an unticked checkbox, back to page 1", async () => {
+    const user = userEvent.setup()
+    renderCatalogue({ search: { sort: "newest", page: "2" }, list: page(1, 13, 2) })
 
+    const checkbox = screen.getByRole("checkbox", { name: "On sale only" })
+    expect(checkbox).not.toBeChecked()
+    await user.click(checkbox)
+
+    expect(push).toHaveBeenCalledExactlyOnceWith("/products?sort=newest&onSale=true")
+  })
+
+  it("turns the sale filter off from a ticked checkbox, keeping the other filters", async () => {
+    const user = userEvent.setup()
     renderCatalogue({ search: { sort: "newest", onSale: "true" } })
-    expect(hrefOf(/On sale only/)).toBe("/products?sort=newest")
+
+    const checkbox = screen.getByRole("checkbox", { name: "On sale only" })
+    expect(checkbox).toBeChecked()
+    await user.click(screen.getByText("On sale only"))
+
+    expect(push).toHaveBeenCalledExactlyOnceWith("/products?sort=newest")
   })
 
   it("shows the search term with a link that clears only the search", () => {
@@ -147,17 +166,63 @@ describe("Catalogue", () => {
     expect(hrefOf("Go to the first page")).toBe("/products?q=bag")
   })
 
-  it("submits the sort as a GET form that keeps the other filters", () => {
-    renderCatalogue({ search: { q: "bag", onSale: "1", sort: "price-desc" } })
+  it("shows the current sort in the Sort by select", () => {
+    renderCatalogue({ search: { sort: "price-desc" } })
 
-    const select = screen.getByRole("combobox", { name: "Sort by" })
-    expect(select).toHaveValue("price-desc")
-    const form = select.closest("form")!
-    expect(form).toHaveAttribute("action", "/products")
-    const hidden = [...form.querySelectorAll<HTMLInputElement>('input[type="hidden"]')].map((i) => [i.name, i.value])
-    expect(hidden).toEqual([
-      ["q", "bag"],
-      ["onSale", "true"],
+    expect(screen.getByRole("combobox", { name: "Sort by" })).toHaveTextContent("Price: high to low")
+  })
+
+  it("shows Featured when no sort is given", () => {
+    renderCatalogue()
+
+    expect(screen.getByRole("combobox", { name: "Sort by" })).toHaveTextContent("Featured")
+  })
+
+  it("lists every sort option and marks the current one", async () => {
+    const user = userEvent.setup()
+    renderCatalogue({ search: { sort: "rating" } })
+
+    await user.click(screen.getByRole("combobox", { name: "Sort by" }))
+
+    const listbox = await screen.findByRole("listbox")
+    expect(within(listbox).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "Featured",
+      "Newest",
+      "Price: low to high",
+      "Price: high to low",
+      "Top rated",
     ])
+    expect(within(listbox).getByRole("option", { name: "Top rated" })).toHaveAttribute("aria-selected", "true")
+  })
+
+  it("navigates to the new sort, keeping the other filters and going back to page 1", async () => {
+    const user = userEvent.setup()
+    renderCatalogue({ search: { q: "bag", onSale: "1", sort: "price-desc", page: "3" }, list: page(12, 40, 3) })
+
+    await user.click(screen.getByRole("combobox", { name: "Sort by" }))
+    await user.click(await screen.findByRole("option", { name: "Price: low to high" }))
+
+    expect(push).toHaveBeenCalledExactlyOnceWith("/products?q=bag&sort=price-asc&onSale=true")
+    await waitFor(() => expect(screen.queryByRole("listbox")).not.toBeInTheDocument())
+  })
+
+  it("drops the sort param when switching back to the default sort, on a category page", async () => {
+    const user = userEvent.setup()
+    renderCatalogue({ basePath: "/categories/bags", activeCategory: "bags", search: { sort: "newest" } })
+
+    await user.click(screen.getByRole("combobox", { name: "Sort by" }))
+    await user.click(await screen.findByRole("option", { name: "Featured" }))
+
+    expect(push).toHaveBeenCalledExactlyOnceWith("/categories/bags")
+  })
+
+  it("does not navigate when the current sort is picked again", async () => {
+    const user = userEvent.setup()
+    renderCatalogue({ search: { sort: "newest" } })
+
+    await user.click(screen.getByRole("combobox", { name: "Sort by" }))
+    await user.click(await screen.findByRole("option", { name: "Newest" }))
+
+    expect(push).not.toHaveBeenCalled()
   })
 })

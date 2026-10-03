@@ -1,8 +1,9 @@
 import Link from "next/link"
-import { Check, SearchX, X } from "lucide-react"
+import { SearchX, X } from "lucide-react"
 
 import { Pagination } from "@/components/products/pagination"
 import { ProductCard } from "@/components/products/product-card"
+import { SaleFilter } from "@/components/products/sale-filter"
 import { SortSelect } from "@/components/products/sort-select"
 import { buttonVariants } from "@/components/ui/button"
 import type { Category } from "@/lib/categories"
@@ -70,22 +71,10 @@ export function Catalogue({ basePath, title, description, query, activeCategory,
 
           <div>
             <h2 className="sr-only text-sm font-semibold lg:not-sr-only lg:mb-2">Offers</h2>
-            <Link
-              href={catalogueHref(basePath, { ...query, onSale: !query.onSale, page: 1 })}
-              aria-current={query.onSale ? "true" : undefined}
-              className="flex items-center gap-2 rounded-md py-1 text-sm hover:text-foreground"
-            >
-              <span
-                aria-hidden
-                className={cn(
-                  "flex size-4 items-center justify-center rounded border",
-                  query.onSale ? "border-primary bg-primary text-primary-foreground" : "border-input",
-                )}
-              >
-                {query.onSale && <Check className="size-3" />}
-              </span>
-              On sale only
-            </Link>
+            <SaleFilter
+              checked={query.onSale ?? false}
+              toggleHref={catalogueHref(basePath, { ...query, onSale: !query.onSale, page: 1 })}
+            />
           </div>
         </aside>
 
