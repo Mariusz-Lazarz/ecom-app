@@ -24,6 +24,8 @@ vi.mock("@/auth", () => ({ auth: async () => session.current }))
 vi.mock("@/lib/orders", () => orders)
 vi.mock("@/lib/addresses", () => addresses)
 vi.mock("@/lib/flash", () => ({ flash: (...args: unknown[]) => flash(...args) }))
+// Emails are covered by email-wiring.test.ts.
+vi.mock("@/lib/mail", () => ({ sendMailLater: () => {} }))
 vi.mock("next/cache", () => ({
   refresh: () => refresh(),
   revalidatePath: (...args: unknown[]) => revalidatePath(...args),

@@ -7,6 +7,9 @@ vi.mock("@/lib/users", () => {
   return { createUser: (...args: unknown[]) => createUser(...args), EmailTakenError }
 })
 
+// Emails are covered by email-wiring.test.ts.
+vi.mock("@/lib/mail", () => ({ sendMailLater: () => {} }))
+
 const { register } = await import("@/app/actions/register")
 const { EmailTakenError } = await import("@/lib/users")
 
