@@ -1,7 +1,9 @@
 import { render, screen, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import type { AnalyticsPeriod, DayRange } from "@/lib/admin-analytics"
 import type { AdminProduct, AdminProductListOptions, AdminProductSummary } from "@/lib/admin-products"
+import type { AnalyticsReport, RevenueTrend } from "@/lib/analytics"
 import type { ContactMessage } from "@/lib/contact"
 import type { AdminOrderSummary, OrderDetail, OrderListOptions, OrderStats, Page } from "@/lib/orders"
 import type { AdminReview } from "@/lib/reviews"
@@ -23,6 +25,8 @@ const listAdminReviews = vi.fn<(options: AdminReviewListQuery) => Promise<Page<A
 const getReviewStatusCounts = vi.fn<() => Promise<{ published: number; hidden: number }>>()
 const listNewContactMessages = vi.fn<(limit: number) => Promise<ContactMessage[]>>()
 const countNewContactMessages = vi.fn<() => Promise<number>>()
+const getAnalytics = vi.fn<(period: AnalyticsPeriod) => Promise<AnalyticsReport>>()
+const getRevenueTrend = vi.fn<(range: DayRange) => Promise<RevenueTrend>>()
 const notFound = vi.fn(() => {
   throw Object.assign(new Error("NEXT_HTTP_ERROR_FALLBACK;404"), { digest: "NEXT_HTTP_ERROR_FALLBACK;404" })
 })
@@ -55,6 +59,10 @@ vi.mock("@/lib/contact", () => ({
   listNewContactMessages: (limit: number) => listNewContactMessages(limit),
   countNewContactMessages: () => countNewContactMessages(),
 }))
+vi.mock("@/lib/analytics", () => ({
+  getAnalytics: (period: AnalyticsPeriod) => getAnalytics(period),
+  getRevenueTrend: (range: DayRange) => getRevenueTrend(range),
+}))
 vi.mock("@/app/actions/reviews", () => ({ setReviewStatus: vi.fn(), deleteReview: vi.fn() }))
 vi.mock("@/app/actions/orders", () => ({ changeOrderStatus: vi.fn() }))
 vi.mock("@/app/actions/admin-products", () => ({
@@ -70,6 +78,7 @@ const { default: ProductsPage } = await import("@/app/admin/products/page")
 const { default: NewProductPage } = await import("@/app/admin/products/new/page")
 const { default: EditProductPage } = await import("@/app/admin/products/[id]/page")
 const { default: ReviewsPage } = await import("@/app/admin/reviews/page")
+const { default: AnalyticsPage } = await import("@/app/admin/analytics/page")
 
 const stats: OrderStats = {
   counts: { pending: 2, processing: 1, shipped: 0, delivered: 3, cancelled: 1, rejected: 0 },
@@ -92,6 +101,50 @@ const page = (items: AdminOrderSummary[], extra: Partial<Page<AdminOrderSummary>
   pageCount: items.length ? 1 : 0,
   ...extra,
 })
+
+const day = (date: string) => new Date(`${date}T00:00:00Z`)
+const zeroTotals = { revenueCents: 0, orders: 0, averageOrderCents: 0, newCustomers: 0 }
+const noStatuses = { pending: 0, processing: 0, shipped: 0, delivered: 0, cancelled: 0, rejected: 0 }
+
+/** A three-day report: Oct 2 $120 (2 orders), Oct 3 nothing, Oct 4 $30 (1 order). */
+const analyticsReport = (overrides: Partial<AnalyticsReport> = {}): AnalyticsReport => ({
+  range: { from: day("2026-10-02"), to: day("2026-10-05") },
+  previous: { from: day("2026-09-29"), to: day("2026-10-02") },
+  currency: "USD",
+  totals: { revenueCents: 15000, orders: 3, averageOrderCents: 5000, newCustomers: 2 },
+  previousTotals: { revenueCents: 10000, orders: 3, averageOrderCents: 3333, newCustomers: 0 },
+  daily: [
+    { date: "2026-10-02", revenueCents: 12000, orders: 2 },
+    { date: "2026-10-03", revenueCents: 0, orders: 0 },
+    { date: "2026-10-04", revenueCents: 3000, orders: 1 },
+  ],
+  topByUnits: [
+    { productId: PRODUCT_ID, name: "Trail Mug", brand: "Halden", units: 4, revenueCents: 5000 },
+    { productId: null, name: "Old Lamp", brand: "Lumo", units: 1, revenueCents: 9000 },
+  ],
+  topByRevenue: [
+    { productId: null, name: "Old Lamp", brand: "Lumo", units: 1, revenueCents: 9000 },
+    { productId: PRODUCT_ID, name: "Trail Mug", brand: "Halden", units: 4, revenueCents: 5000 },
+  ],
+  categories: [
+    { categoryId: null, name: "Deleted products", units: 1, revenueCents: 9000 },
+    { categoryId: "c-1", name: "Home & Kitchen", units: 4, revenueCents: 5000 },
+  ],
+  statusCounts: { ...noStatuses, delivered: 2, pending: 1, cancelled: 1 },
+  discounts: { totalCents: 1500, orders: 1, topCodes: [{ code: "SAVE15", orders: 1, discountCents: 1500 }] },
+  ...overrides,
+})
+
+const revenueTrend: RevenueTrend = {
+  range: { from: day("2026-09-05"), to: day("2026-10-05") },
+  daily: [],
+  revenueCents: 45000,
+  previousRevenueCents: 30000,
+  currency: "USD",
+}
+
+const renderAnalytics = async (searchParams: Record<string, string | string[]> = {}) =>
+  render(await AnalyticsPage({ params: Promise.resolve({}), searchParams: Promise.resolve(searchParams) }))
 
 const NOT_FOUND = { digest: "NEXT_HTTP_ERROR_FALLBACK;404" }
 
@@ -178,6 +231,8 @@ beforeEach(() => {
   getReviewStatusCounts.mockReset().mockResolvedValue({ published: 0, hidden: 0 })
   listNewContactMessages.mockReset().mockResolvedValue([])
   countNewContactMessages.mockReset().mockResolvedValue(0)
+  getAnalytics.mockReset().mockResolvedValue(analyticsReport())
+  getRevenueTrend.mockReset().mockResolvedValue(revenueTrend)
   notFound.mockClear()
 })
 
@@ -195,6 +250,15 @@ describe("admin pages guard access", () => {
     expect(listLatestReviews).not.toHaveBeenCalled()
     expect(listNewContactMessages).not.toHaveBeenCalled()
     expect(countNewContactMessages).not.toHaveBeenCalled()
+    expect(getRevenueTrend).not.toHaveBeenCalled()
+  })
+
+  it("the analytics page 404s for non-admins before reading anything", async () => {
+    forbid()
+
+    await expect(renderAnalytics({ range: "7d" })).rejects.toMatchObject(NOT_FOUND)
+    expect(requireAdmin).toHaveBeenCalledExactlyOnceWith("/admin/analytics")
+    expect(getAnalytics).not.toHaveBeenCalled()
   })
 
   it("the review list 404s for non-admins before reading anything", async () => {
@@ -630,5 +694,151 @@ describe("admin order page", () => {
 
     expect(screen.getByText("No further actions: this order is final.")).toBeInTheDocument()
     expect(screen.queryAllByRole("button")).toEqual([])
+  })
+})
+
+describe("admin dashboard revenue card", () => {
+  it("shows the last 30 days' revenue against the 30 before, linking to analytics", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-04T15:00:00Z"), toFake: ["Date"] })
+    try {
+      render(await DashboardPage())
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(getRevenueTrend).toHaveBeenCalledExactlyOnceWith({ from: day("2026-09-05"), to: day("2026-10-05") })
+    expect(screen.getByText("Revenue, last 30 days")).toBeInTheDocument()
+    expect(screen.getByTestId("dashboard-revenue-trend")).toHaveTextContent("$450.00")
+    expect(screen.getByText("up 50%")).toBeInTheDocument()
+    expect(screen.getByText(/vs the 30 days before/)).toHaveTextContent("($300.00)")
+    expect(screen.getByRole("link", { name: /^Analytics$/ })).toHaveAttribute("href", "/admin/analytics")
+  })
+})
+
+describe("admin analytics page", () => {
+  it("reads the range from the URL and shows the key figures against the previous period", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-04T15:00:00Z"), toFake: ["Date"] })
+    try {
+      await renderAnalytics({ range: "7d" })
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(getAnalytics).toHaveBeenCalledExactlyOnceWith({ from: day("2026-09-28"), to: day("2026-10-05") })
+    expect(screen.getByRole("heading", { level: 1, name: "Analytics" })).toBeInTheDocument()
+    expect(screen.getByTestId("analytics-period")).toHaveTextContent("Oct 2 – Oct 4, 2026")
+    expect(screen.getByTestId("kpi-revenue")).toHaveTextContent("$150.00")
+    expect(screen.getByTestId("kpi-revenue-delta")).toHaveTextContent("+50%up 50% vs previous 3 days ($100.00)")
+    expect(screen.getByTestId("kpi-orders-delta")).toHaveTextContent("no change")
+    expect(screen.getByTestId("kpi-average-order")).toHaveTextContent("$50.00")
+    expect(screen.getByTestId("kpi-new-customers-delta")).toHaveTextContent("up from zero")
+    expect(screen.getByRole("tab", { name: "7 days" })).toHaveAttribute("aria-selected", "true")
+  })
+
+  it("falls back to 30 days for an unknown range", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-04T15:00:00Z"), toFake: ["Date"] })
+    try {
+      await renderAnalytics({ range: "forever" })
+    } finally {
+      vi.useRealTimers()
+    }
+
+    expect(getAnalytics).toHaveBeenCalledExactlyOnceWith({ from: day("2026-09-05"), to: day("2026-10-05") })
+    expect(screen.getByRole("tab", { name: "30 days" })).toHaveAttribute("aria-selected", "true")
+  })
+
+  it("asks for all time without a start and says there's nothing to compare with", async () => {
+    getAnalytics.mockResolvedValue(analyticsReport({ previous: null, previousTotals: null }))
+
+    await renderAnalytics({ range: "all" })
+
+    expect(getAnalytics.mock.calls[0][0].from).toBeNull()
+    expect(screen.queryByTestId("kpi-revenue-delta")).not.toBeInTheDocument()
+    expect(screen.getAllByText("Since Oct 2, 2026")).toHaveLength(4)
+  })
+
+  it("summarises each chart in words and offers its numbers as a table", async () => {
+    await renderAnalytics()
+
+    expect(screen.getByRole("figure", { name: "Revenue per day" })).toHaveAccessibleDescription(
+      "$150.00 over 3 days. Best day: Oct 2, 2026 with $120.00. 1 day without revenue.",
+    )
+    expect(screen.getByRole("figure", { name: "Orders by status" })).toHaveAccessibleDescription(
+      "4 orders placed: 1 pending, 2 delivered, 1 cancelled.",
+    )
+    expect(screen.getByRole("figure", { name: "Sales by category" })).toHaveAccessibleDescription(
+      "Deleted products led with $90.00, 64% of item sales (before discounts and shipping).",
+    )
+    const revenueCard = screen.getByRole("figure", { name: "Revenue per day" }).parentElement!
+    const rows = within(revenueCard).getAllByRole("row").map((row) => row.textContent)
+    expect(rows).toEqual(["DayRevenueOrders", "Oct 2, 2026$120.002", "Oct 3, 2026$0.000", "Oct 4, 2026$30.001"])
+  })
+
+  it("lists the top products, linking the ones that still exist to their edit page", async () => {
+    await renderAnalytics()
+
+    const byUnits = screen.getByRole("table", { name: "Top products by units" })
+    expect(within(byUnits).getAllByRole("row").map((row) => row.textContent)).toEqual([
+      "#ProductUnitsSales",
+      "1Trail MugHalden4$50.00",
+      "2Old Lamp (deleted)Lumo1$90.00",
+    ])
+    expect(within(byUnits).getByRole("link", { name: "Trail Mug" })).toHaveAttribute(
+      "href",
+      `/admin/products/${PRODUCT_ID}`,
+    )
+    expect(within(byUnits).queryByRole("link", { name: /Old Lamp/ })).not.toBeInTheDocument()
+    expect(screen.getByTestId("analytics-discounts")).toHaveTextContent("$15.00 off 1 order with a code.")
+    expect(within(screen.getByRole("table", { name: "Top discount codes" })).getAllByRole("row")[1]).toHaveTextContent(
+      "SAVE151$15.00",
+    )
+  })
+
+  it("links the CSV export to the period's days", async () => {
+    await renderAnalytics()
+
+    expect(screen.getByRole("link", { name: "Export orders CSV" })).toHaveAttribute(
+      "href",
+      "/api/admin/orders/export?from=2026-10-02&to=2026-10-04",
+    )
+  })
+
+  it("shows an empty state instead of charts when nothing was ordered, with a link to all time", async () => {
+    getAnalytics.mockResolvedValue(
+      analyticsReport({
+        totals: zeroTotals,
+        daily: [],
+        topByUnits: [],
+        topByRevenue: [],
+        categories: [],
+        statusCounts: noStatuses,
+        discounts: { totalCents: 0, orders: 0, topCodes: [] },
+      }),
+    )
+
+    await renderAnalytics({ range: "7d" })
+
+    expect(screen.getByText("No orders in this period")).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "See all time" })).toHaveAttribute("href", "/admin/analytics?range=all")
+    expect(screen.queryByRole("figure")).not.toBeInTheDocument()
+    expect(screen.getByTestId("kpi-revenue")).toHaveTextContent("$0.00")
+    expect(screen.getByTestId("kpi-revenue-delta")).toHaveTextContent("down 100%")
+  })
+})
+
+describe("admin order list export", () => {
+  it("links the CSV export with the current status and search, not the page", async () => {
+    await renderOrders({ status: "shipped", q: "ada@", page: "2" })
+
+    expect(screen.getByRole("link", { name: "Export CSV" })).toHaveAttribute(
+      "href",
+      "/api/admin/orders/export?status=shipped&q=ada%40",
+    )
+  })
+
+  it("exports every order without filters", async () => {
+    await renderOrders()
+
+    expect(screen.getByRole("link", { name: "Export CSV" })).toHaveAttribute("href", "/api/admin/orders/export")
   })
 })

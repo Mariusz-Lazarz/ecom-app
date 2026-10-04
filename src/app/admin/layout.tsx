@@ -46,7 +46,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
             <ThemeToggle />
             <Link href="/" aria-label="Back to store" className={buttonVariants({ variant: "ghost", size: "sm" })}>
               <ArrowLeft data-icon="inline-start" />
-              <span className="hidden sm:inline">Back to store</span>
+              <span className="hidden 2xl:inline">Back to store</span>
             </Link>
           </div>
         </div>

@@ -205,6 +205,7 @@ describe("AdminOrderTable", () => {
 describe("AdminNav", () => {
   it.each([
     ["/admin", "Dashboard"],
+    ["/admin/analytics", "Analytics"],
     ["/admin/orders", "Orders"],
     ["/admin/orders/NC-1001", "Orders"],
     ["/admin/products", "Products"],
@@ -222,6 +223,7 @@ describe("AdminNav", () => {
     const links = within(screen.getByRole("navigation", { name: "Admin" })).getAllByRole("link")
     expect(links.map((l) => [l.textContent, l.getAttribute("href")])).toEqual([
       ["Dashboard", "/admin"],
+      ["Analytics", "/admin/analytics"],
       ["Orders", "/admin/orders"],
       ["Products", "/admin/products"],
       ["Reviews", "/admin/reviews"],

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto"
 import path from "node:path"
 
 import { expect, test, type Page, type TestInfo } from "@playwright/test"
@@ -62,7 +63,10 @@ test("an admin creates a product with a photo, sees it in the store, edits its p
 }, testInfo) => {
   test.setTimeout(90_000)
   const email = await createUser(testInfo, "admin")
-  const run = `${testInfo.project.name}-${Date.now().toString(36)}`
+  // Unique per test run, not just per millisecond: parallel workers of one project (e.g. with
+  // --repeat-each) can start this test in the same millisecond, and a shared slug makes the second
+  // create fail with "slug taken" while the first one's afterEach deletes the other's product.
+  const run = `${testInfo.project.name}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`
   const name = `E2E Trail Mug ${run}`
   const slug = `e2e-trail-mug-${run}`
   slugPrefixes.push(slug)
