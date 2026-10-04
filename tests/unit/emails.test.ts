@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import {
+  contactAutoReplyEmail,
+  contactNotificationEmail,
   isEmailedOrderStatus,
+  newsletterConfirmationEmail,
   orderConfirmationEmail,
   orderStatusEmail,
   passwordResetEmail,
@@ -233,5 +236,75 @@ describe("passwordResetEmail", () => {
     const { html } = passwordResetEmail({ firstName: EVIL, resetUrl, expiresInMinutes: 60 })
     expect(html).not.toContain("<script>")
     expect(html).toContain(`Hi ${ESCAPED_EVIL},`)
+  })
+})
+
+describe("newsletterConfirmationEmail", () => {
+  const unsubscribeUrl = "https://shop.example/newsletter/unsubscribe?token=abc_DEF-123"
+
+  it("confirms the sign-up with the welcome code and links to unsubscribe", () => {
+    const email = newsletterConfirmationEmail({ unsubscribeUrl })
+
+    expect(email.subject).toBe("You're on the Northcart list")
+    expect(email.text).toContain("WELCOME10")
+    expect(email.html).toContain("<strong>WELCOME10</strong>")
+    expect(email.text).toContain(`Unsubscribe: ${unsubscribeUrl}`)
+    expect(hrefs(email.html)).toContain(unsubscribeUrl)
+    expect(hrefs(email.html)).toContain("https://shop.example/products")
+  })
+
+  it("escapes the unsubscribe link in the HTML", () => {
+    const email = newsletterConfirmationEmail({ unsubscribeUrl: `https://shop.example/x?a=1&b="2"` })
+    expect(email.html).toContain("https://shop.example/x?a=1&amp;b=&quot;2&quot;")
+    expect(email.html).not.toContain(`b="2"`)
+  })
+})
+
+describe("contact emails", () => {
+  const message = {
+    id: "0b0c4d4e-1111-4222-8333-444455556666",
+    name: "Ada Lovelace",
+    email: "ada@example.com",
+    orderNumber: "NC-10001",
+    topic: "returns" as const,
+    message: "Line one\nLine two",
+  }
+
+  it("auto-replies to the sender, greeting them by first name and quoting the message", () => {
+    const email = contactAutoReplyEmail(message)
+
+    expect(email.subject).toBe("We've got your message")
+    expect(email.html).toContain("Hi Ada,")
+    expect(email.html).toContain("Line one<br>Line two")
+    expect(email.html).toContain("<strong>Topic:</strong> Returns &amp; refunds")
+    expect(email.html).toContain("<strong>Order:</strong> NC-10001")
+    expect(email.text).toContain("Topic: Returns & refunds\nOrder: NC-10001\n\nLine one\nLine two")
+    expect(hrefs(email.html)).toContain("https://shop.example/help/returns")
+  })
+
+  it("leaves the order line out when no order was given", () => {
+    const email = contactAutoReplyEmail({ ...message, orderNumber: null })
+    expect(email.html).not.toContain("Order:")
+    expect(email.text).not.toContain("Order:")
+  })
+
+  it("notifies the shop with the sender, the message and a link to it in the admin area", () => {
+    const email = contactNotificationEmail(message)
+
+    expect(email.subject).toBe("New message: Returns & refunds from Ada Lovelace")
+    expect(email.html).toContain("Ada Lovelace &lt;")
+    expect(hrefs(email.html)).toContain("mailto:ada@example.com")
+    expect(hrefs(email.html)).toContain(`https://shop.example/admin/messages/${message.id}`)
+    expect(email.text).toContain("From: Ada Lovelace <ada@example.com>")
+  })
+
+  it("escapes everything the sender typed in both emails", () => {
+    const evil = { ...message, name: EVIL, orderNumber: EVIL, message: `${EVIL}\n& more` }
+
+    for (const email of [contactAutoReplyEmail(evil), contactNotificationEmail(evil)]) {
+      expect(email.html).not.toContain("<script>")
+      expect(email.html).toContain(ESCAPED_EVIL)
+    }
+    expect(contactAutoReplyEmail(evil).html).toContain(`${ESCAPED_EVIL}<br>&amp; more`)
   })
 })

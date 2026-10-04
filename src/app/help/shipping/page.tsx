@@ -14,6 +14,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 
+import { HelpNav } from "@/components/help/help-nav"
 import { SectionHeading } from "@/components/home/section-heading"
 import { LottieAnimation } from "@/components/lottie-animation"
 import { ShippingEstimator } from "@/components/shipping/shipping-estimator"
@@ -52,6 +53,7 @@ export default function ShippingPage() {
   return (
     <>
       <SiteHeader />
+      <HelpNav />
       <main className="flex-1">
         <section className="relative overflow-hidden">
           <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_left,var(--color-muted),transparent_60%)]" />

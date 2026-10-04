@@ -12,6 +12,9 @@ vi.mock("@/components/home/featured-products", () => ({
   FeaturedProducts: () => <section><h2>Featured products</h2></section>,
 }))
 
+// The newsletter form posts to a Server Action, which imports the database outside Next.js.
+vi.mock("@/app/actions/newsletter", () => ({ subscribeToNewsletter: vi.fn() }))
+
 const { default: Home } = await import("@/app/page")
 
 describe("Home page", () => {

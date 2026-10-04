@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { AdminProduct, AdminProductListOptions, AdminProductSummary } from "@/lib/admin-products"
+import type { ContactMessage } from "@/lib/contact"
 import type { AdminOrderSummary, OrderDetail, OrderListOptions, OrderStats, Page } from "@/lib/orders"
 import type { AdminReview } from "@/lib/reviews"
 import type { AdminReviewListQuery } from "@/lib/validation/reviews"
@@ -20,6 +21,8 @@ const listCategories = vi.fn()
 const listLatestReviews = vi.fn<(limit: number) => Promise<AdminReview[]>>()
 const listAdminReviews = vi.fn<(options: AdminReviewListQuery) => Promise<Page<AdminReview>>>()
 const getReviewStatusCounts = vi.fn<() => Promise<{ published: number; hidden: number }>>()
+const listNewContactMessages = vi.fn<(limit: number) => Promise<ContactMessage[]>>()
+const countNewContactMessages = vi.fn<() => Promise<number>>()
 const notFound = vi.fn(() => {
   throw Object.assign(new Error("NEXT_HTTP_ERROR_FALLBACK;404"), { digest: "NEXT_HTTP_ERROR_FALLBACK;404" })
 })
@@ -47,6 +50,10 @@ vi.mock("@/lib/reviews", () => ({
   listLatestReviews: (limit: number) => listLatestReviews(limit),
   listAdminReviews: (options: AdminReviewListQuery) => listAdminReviews(options),
   getReviewStatusCounts: () => getReviewStatusCounts(),
+}))
+vi.mock("@/lib/contact", () => ({
+  listNewContactMessages: (limit: number) => listNewContactMessages(limit),
+  countNewContactMessages: () => countNewContactMessages(),
 }))
 vi.mock("@/app/actions/reviews", () => ({ setReviewStatus: vi.fn(), deleteReview: vi.fn() }))
 vi.mock("@/app/actions/orders", () => ({ changeOrderStatus: vi.fn() }))
@@ -169,6 +176,8 @@ beforeEach(() => {
   listLatestReviews.mockReset().mockResolvedValue([])
   listAdminReviews.mockReset().mockResolvedValue(page([]) as unknown as Page<AdminReview>)
   getReviewStatusCounts.mockReset().mockResolvedValue({ published: 0, hidden: 0 })
+  listNewContactMessages.mockReset().mockResolvedValue([])
+  countNewContactMessages.mockReset().mockResolvedValue(0)
   notFound.mockClear()
 })
 
@@ -184,6 +193,8 @@ describe("admin pages guard access", () => {
     expect(listOrdersAwaitingAction).not.toHaveBeenCalled()
     expect(listLowStockProducts).not.toHaveBeenCalled()
     expect(listLatestReviews).not.toHaveBeenCalled()
+    expect(listNewContactMessages).not.toHaveBeenCalled()
+    expect(countNewContactMessages).not.toHaveBeenCalled()
   })
 
   it("the review list 404s for non-admins before reading anything", async () => {
@@ -237,6 +248,43 @@ describe("admin pages guard access", () => {
 })
 
 describe("admin dashboard", () => {
+  it("lists the newest unread messages with the unread count", async () => {
+    countNewContactMessages.mockResolvedValue(7)
+    listNewContactMessages.mockResolvedValue([
+      {
+        id: "0b0c4d4e-1111-4222-8333-444455556666",
+        name: "Ada Lovelace",
+        email: "ada@example.com",
+        orderNumber: null,
+        topic: "returns",
+        message: "Can I return the mug?",
+        status: "new",
+        userId: null,
+        createdAt: new Date("2026-10-01T10:00:00Z"),
+        updatedAt: new Date("2026-10-01T10:00:00Z"),
+      },
+    ])
+
+    render(await DashboardPage())
+
+    expect(listNewContactMessages).toHaveBeenCalledExactlyOnceWith(5)
+    expect(screen.getByText("7 unread messages from the contact form.")).toBeInTheDocument()
+    const list = screen.getByRole("list", { name: "New messages" })
+    expect(within(list).getByRole("link", { name: "Ada Lovelace · Returns & refunds" })).toHaveAttribute(
+      "href",
+      "/admin/messages/0b0c4d4e-1111-4222-8333-444455556666",
+    )
+    expect(within(list).getByText("Can I return the mug?")).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: /All messages$/ })).toHaveAttribute("href", "/admin/messages")
+  })
+
+  it("says so when every message has been read", async () => {
+    render(await DashboardPage())
+
+    expect(screen.getByText("Every contact message has been read.")).toBeInTheDocument()
+    expect(screen.getByText("No unread messages. Nice work!")).toBeInTheDocument()
+  })
+
   it("shows the stats and the oldest orders needing attention", async () => {
     listOrdersAwaitingAction.mockResolvedValue([adminOrder({ number: "NC-1003", status: "processing" })])
 

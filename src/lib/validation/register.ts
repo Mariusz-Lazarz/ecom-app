@@ -36,7 +36,7 @@ export type RegisterFormState =
       success?: false
       errors?: Partial<Record<keyof RegisterInput, string[]>>
       message?: string
-      values?: Partial<Pick<RegisterInput, "firstName" | "lastName" | "email">>
+      values?: Partial<Pick<RegisterInput, "firstName" | "lastName" | "email"> & { newsletter: boolean }>
     }
   | { success: true; firstName: string }
   | undefined

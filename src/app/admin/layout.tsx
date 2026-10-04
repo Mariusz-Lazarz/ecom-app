@@ -1,16 +1,34 @@
 import Link from "next/link"
 import { ArrowLeft, Shield } from "lucide-react"
 
+import { auth } from "@/auth"
 import { AdminNav } from "@/components/admin/admin-nav"
 import { ThemeToggle } from "@/components/theme/theme-toggle"
 import { buttonVariants } from "@/components/ui/button"
+import { countNewContactMessages } from "@/lib/contact"
+import { logger } from "@/lib/logger"
+
+const log = logger.child({ scope: "admin.layout" })
+
+/** Unread contact messages for the nav badge: 0 for non-admins (without querying) or when the count fails. */
+async function unreadMessages() {
+  const session = await auth()
+  if (session?.user?.role !== "admin") return 0
+  try {
+    return await countNewContactMessages()
+  } catch (err) {
+    log.error("Couldn't count unread messages", { err })
+    return 0
+  }
+}
 
 /**
- * The admin shell: title, section nav, theme toggle and a link back to the store. It renders no data and doesn't
- * guard access itself (layouts don't re-render on navigation); every admin page calls
- * `requireAdmin()`.
+ * The admin shell: title, section nav (with the unread messages count), theme toggle and a link
+ * back to the store. It doesn't guard access itself (layouts don't re-render on navigation); every
+ * admin page calls `requireAdmin()`. The badge updates whenever a Server Action refreshes the page.
  */
-export default function AdminLayout({ children }: LayoutProps<"/admin">) {
+export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
+  const unread = await unreadMessages()
   return (
     <>
       <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur supports-backdrop-filter:bg-background/60">
@@ -21,8 +39,8 @@ export default function AdminLayout({ children }: LayoutProps<"/admin">) {
             </span>
             <span className="sr-only text-lg sm:not-sr-only">Admin</span>
           </Link>
-          <div className="sm:ml-4">
-            <AdminNav />
+          <div className="-my-2 min-w-0 overflow-x-auto py-2 sm:ml-4">
+            <AdminNav unreadMessages={unread} />
           </div>
           <div className="ml-auto flex items-center gap-1">
             <ThemeToggle />
