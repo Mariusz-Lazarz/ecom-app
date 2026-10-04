@@ -17,8 +17,8 @@ const animations = ["hero-shopping", "secure-payment", "delivery", "gift"]
 
 const isMobile = (page: Page) => (page.viewportSize()?.width ?? 0) < 768
 
-// Don't use "networkidle": while /about, /cart etc. don't exist yet, Next's router leaves the 404
-// prefetch responses open, so the network never goes idle. Wait for what the page actually needs.
+// Don't use "networkidle": the animations and Next's prefetches keep the network busy. Wait for what
+// the page actually needs.
 async function waitForMedia(page: Page) {
   await page.waitForLoadState("load")
   // Product photos are lazy-loaded, so only the hero animation is guaranteed to start without scrolling
@@ -29,12 +29,9 @@ test.describe("home page", () => {
   test("loads without errors and with the store's metadata", async ({ page }) => {
     const errors: string[] = []
     page.on("pageerror", (error) => errors.push(error.message))
+    // Every linked page exists, so even a failed route prefetch counts.
     page.on("console", (msg) => {
-      if (msg.type() !== "error") return
-      const source = msg.location().url
-      // Linked pages like /about and /cart aren't built yet, so Next's route prefetches 404. Any other failure counts.
-      const isPendingRoutePrefetch = msg.text().includes("404") && new URL(source).searchParams.has("_rsc")
-      if (!isPendingRoutePrefetch) errors.push(`${msg.text()} (${source})`)
+      if (msg.type() === "error") errors.push(`${msg.text()} (${msg.location().url})`)
     })
 
     const response = await page.goto("/")
