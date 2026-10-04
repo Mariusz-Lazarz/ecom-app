@@ -1,13 +1,22 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react"
-import { ArrowLeft, Bot, Info, MessageCircle, Plus, SendHorizontal } from "lucide-react"
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react"
+import { createPortal } from "react-dom"
+import { ArrowLeft, ArrowUp, Bot, ChevronDown, Info, MessageCircle, MessagesSquare, Plus, X } from "lucide-react"
 
-import { Button, buttonVariants } from "@/components/ui/button"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { ChatMarkdown } from "@/components/support-chat/chat-markdown"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
-import { Textarea } from "@/components/ui/textarea"
 import type { ChatMessage, ChatMessagesPage, ChatSession } from "@/lib/harnesslab"
 import { notify } from "@/lib/notify"
 import { cn } from "@/lib/utils"
@@ -15,6 +24,9 @@ import { MAX_CHAT_MESSAGE_LENGTH } from "@/lib/validation/chat"
 
 /** How often an open conversation asks for the assistant's reply while it is answering. */
 export const CHAT_POLL_MS = 1500
+
+/** Questions a new conversation offers to start with. */
+export const CHAT_SUGGESTIONS = ["Where is my latest order?", "Show my recent orders", "Has my order shipped yet?"]
 
 /** A conversation being written that doesn't exist yet; it is created with its first message. */
 const NEW = "new"
@@ -26,70 +38,153 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T
 }
 
-function sessionLabel(session: ChatSession) {
-  return session.title ?? "New conversation"
+const sessionLabel = (session: ChatSession) => session.title ?? "New conversation"
+
+function timeLabel(iso: string) {
+  const date = new Date(iso)
+  return new Date().toDateString() === date.toDateString()
+    ? date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : date.toLocaleDateString([], { day: "numeric", month: "short" })
 }
 
+// The chat is portalled to <body>: the header it is rendered from has a backdrop filter, which
+// would make the header the containing block of fixed elements.
+const noSubscription = () => () => {}
+const useMounted = () =>
+  useSyncExternalStore(
+    noSubscription,
+    () => true,
+    () => false,
+  )
+
 /**
- * The header's chat icon and the support assistant it opens, for signed-in customers. The
- * assistant runs in HarnessLab and can look up the customer's own orders; everything goes through
- * the `/api/chat` routes, which sign a token for the customer with every request. The list shows
- * their conversations; a conversation polls for the reply while the assistant answers.
+ * The support assistant for signed-in customers: a chat bubble in the bottom-right corner that
+ * opens a panel above it (full screen on phones). The assistant runs in HarnessLab and can look
+ * up the customer's own orders; everything goes through the `/api/chat` routes, which sign a
+ * token for the customer with every request. The panel lists their conversations; a
+ * conversation polls for the reply while the assistant answers. Closing the panel keeps the open
+ * conversation.
  */
 export function SupportChat() {
+  const mounted = useMounted()
   const [open, setOpen] = useState(false)
   const [sessions, setSessions] = useState<ChatSession[] | null>(null)
   // null: the list of conversations; NEW: a conversation not sent yet; otherwise its id.
   const [view, setView] = useState<string | null>(null)
+  const titleId = useId()
+  const bubbleRef = useRef<HTMLButtonElement>(null)
 
   const loadSessions = useCallback(async () => {
     try {
       const { sessions } = await request<{ sessions: ChatSession[] }>("/api/chat/sessions")
       setSessions(sessions)
+      // Nothing to pick from: go straight to a new conversation.
+      if (sessions.length === 0) setView((current) => current ?? NEW)
     } catch (err) {
       setSessions([])
       notify.error("Couldn't load your conversations", { description: (err as Error).message })
     }
   }, [])
 
-  function show() {
+  const close = useCallback(() => {
+    setOpen(false)
+    bubbleRef.current?.focus()
+  }, [])
+
+  // Escape closes the chat wherever the focus is, the bubble included.
+  useEffect(() => {
+    if (!open) return
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") close()
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [open, close])
+
+  function toggle() {
+    if (open) return close()
     setOpen(true)
+    if (view === null) {
+      setSessions(null)
+      void loadSessions()
+    }
+  }
+
+  function showList() {
     setView(null)
     setSessions(null)
     void loadSessions()
   }
 
-  return (
+  if (!mounted) return null
+
+  return createPortal(
     <>
-      <button
-        type="button"
-        aria-label="Chat with us"
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        className={buttonVariants({ variant: "ghost", size: "icon" })}
-        onClick={show}
+      <section
+        role="dialog"
+        aria-labelledby={titleId}
+        aria-hidden={!open}
+        inert={!open}
+        className={cn(
+          "fixed inset-0 z-50 flex flex-col overflow-hidden bg-background shadow-2xl transition-[opacity,translate,scale] duration-200 ease-out",
+          "sm:inset-auto sm:right-6 sm:bottom-24 sm:h-[min(40rem,calc(100dvh-8rem))] sm:w-[25rem] sm:origin-bottom-right sm:rounded-2xl sm:border",
+          open ? "visible translate-y-0 opacity-100 sm:scale-100" : "invisible translate-y-4 opacity-0 sm:scale-95",
+        )}
       >
-        <MessageCircle />
-      </button>
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent className="w-full gap-0 sm:max-w-md">
-          {view === null ? (
-            <ConversationList sessions={sessions} onOpen={setView} onNew={() => setView(NEW)} />
+        <header className="flex items-center gap-3 border-b px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3">
+          {view !== null ? (
+            <Button variant="ghost" size="icon-sm" onClick={showList} aria-label="All conversations">
+              <ArrowLeft />
+            </Button>
           ) : (
-            <Conversation
-              key={view}
-              sessionId={view === NEW ? null : view}
-              onBack={() => {
-                setView(null)
-                void loadSessions()
-              }}
-              // The conversation stays mounted (its key is unchanged) and keeps what was sent.
-              onCreated={(session) => setSessions((current) => [session, ...(current ?? [])])}
-            />
+            <span className="relative flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+              <Bot className="size-5" />
+              <span className="absolute right-0 bottom-0 size-2.5 rounded-full border-2 border-background bg-emerald-500" />
+            </span>
           )}
-        </SheetContent>
-      </Sheet>
-    </>
+          <div className="min-w-0 flex-1">
+            <h2 id={titleId} className="truncate font-semibold">
+              Northcart assistant
+            </h2>
+            <p className="truncate text-xs text-muted-foreground">Ask about your orders, any time</p>
+          </div>
+          {view === null && (
+            <Button variant="ghost" size="icon-sm" onClick={() => setView(NEW)} aria-label="New conversation">
+              <Plus />
+            </Button>
+          )}
+          <Button variant="ghost" size="icon-sm" onClick={close} aria-label="Close chat">
+            <X className="sm:hidden" />
+            <ChevronDown className="hidden sm:block" />
+          </Button>
+        </header>
+
+        {view === null ? (
+          <ConversationList sessions={sessions} onOpen={setView} onNew={() => setView(NEW)} />
+        ) : (
+          <Conversation
+            key={view}
+            sessionId={view === NEW ? null : view}
+            active={open}
+            // The conversation stays mounted (its key is unchanged) and keeps what was sent.
+            onCreated={(session) => setSessions((current) => [session, ...(current ?? [])])}
+          />
+        )}
+      </section>
+
+      <button
+        ref={bubbleRef}
+        type="button"
+        onClick={toggle}
+        aria-label={open ? "Close chat" : "Chat with us"}
+        aria-expanded={open}
+        className="fixed right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-40 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform duration-200 hover:scale-105 focus-visible:ring-4 focus-visible:ring-ring/50 focus-visible:outline-none active:scale-95 sm:right-6 sm:bottom-6"
+      >
+        <MessageCircle className={cn("absolute size-6 transition-all duration-200", open && "scale-50 rotate-90 opacity-0")} />
+        <ChevronDown className={cn("absolute size-6 transition-all duration-200", !open && "scale-50 -rotate-90 opacity-0")} />
+      </button>
+    </>,
+    document.body,
   )
 }
 
@@ -103,49 +198,61 @@ function ConversationList({
   onNew: () => void
 }) {
   return (
-    <>
-      <SheetHeader className="border-b">
-        <SheetTitle>Ask Northcart</SheetTitle>
-        <SheetDescription>Our assistant can check your orders: status, items, shipping and tracking.</SheetDescription>
-      </SheetHeader>
-      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-4">
-        <Button onClick={onNew} className="w-full">
-          <Plus /> New conversation
-        </Button>
-        {sessions === null &&
-          Array.from({ length: 3 }, (_, i) => <Skeleton key={i} data-testid="conversation-skeleton" className="h-14" />)}
-        {sessions?.length === 0 && (
-          <p className="py-8 text-center text-sm text-muted-foreground">No conversations yet.</p>
-        )}
-        <ul className="flex flex-col gap-1">
-          {sessions?.map((session) => (
-            <li key={session.id}>
-              <button
-                type="button"
-                onClick={() => onOpen(session.id)}
-                className="flex w-full flex-col items-start gap-0.5 rounded-md px-3 py-2 text-left hover:bg-muted"
-              >
-                <span className="line-clamp-1 font-medium">{sessionLabel(session)}</span>
-                <span className="text-xs text-muted-foreground">
-                  {new Date(session.lastActivityAt).toLocaleString()}
-                  {session.status === "running" && " · answering…"}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </>
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain p-4">
+      <button
+        type="button"
+        onClick={onNew}
+        className="flex items-center gap-3 rounded-xl border bg-card p-3 text-left transition-colors hover:bg-muted"
+      >
+        <span className="flex size-9 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <Plus className="size-5" />
+        </span>
+        <span>
+          <span className="block text-sm font-medium">Start a new conversation</span>
+          <span className="block text-xs text-muted-foreground">We usually answer in a few seconds</span>
+        </span>
+      </button>
+
+      {sessions === null &&
+        Array.from({ length: 3 }, (_, i) => (
+          <Skeleton key={i} data-testid="conversation-skeleton" className="h-14 rounded-xl" />
+        ))}
+      {sessions !== null && sessions.length > 0 && (
+        <>
+          <h3 className="px-1 pt-1 text-xs font-medium text-muted-foreground">Recent conversations</h3>
+          <ul className="flex flex-col gap-1">
+            {sessions.map((session) => (
+              <li key={session.id}>
+                <button
+                  type="button"
+                  onClick={() => onOpen(session.id)}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-muted"
+                >
+                  <MessagesSquare className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{sessionLabel(session)}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {session.status === "running" ? "Answering…" : timeLabel(session.lastActivityAt)}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
   )
 }
 
 function Conversation({
   sessionId,
-  onBack,
+  active,
   onCreated,
 }: {
   sessionId: string | null
-  onBack: () => void
+  // The panel is open: the message box takes the focus.
+  active: boolean
   onCreated: (session: ChatSession) => void
 }) {
   const [session, setSession] = useState<ChatSession | null>(null)
@@ -154,8 +261,9 @@ function Conversation({
   const [sending, setSending] = useState(false)
   const lastId = useRef<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
-  const append = useCallback((page: ChatMessagesPage | { messages: ChatMessage[]; session: ChatSession }) => {
+  const append = useCallback((page: { messages: ChatMessage[]; session: ChatSession }) => {
     setSession(page.session)
     if (page.messages.length === 0) return
     lastId.current = page.messages[page.messages.length - 1].id
@@ -206,10 +314,15 @@ function Conversation({
     bottomRef.current?.scrollIntoView?.({ block: "end" })
   }, [messages, answering])
 
-  async function send(event?: FormEvent) {
-    event?.preventDefault()
-    const message = input.trim()
-    if (!message || sending || answering || session?.status === "paused") return
+  useEffect(() => {
+    if (active) inputRef.current?.focus({ preventScroll: true })
+  }, [active])
+
+  const paused = session?.status === "paused"
+
+  async function send(text: string) {
+    const message = text.trim()
+    if (!message || sending || answering || paused) return
     setSending(true)
     try {
       let id = session?.id ?? sessionId
@@ -233,81 +346,138 @@ function Conversation({
     }
   }
 
+  function onSubmit(event: FormEvent) {
+    event.preventDefault()
+    void send(input)
+  }
+
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault()
-      void send()
+      void send(input)
     }
   }
 
-  const paused = session?.status === "paused"
-
   return (
     <>
-      <SheetHeader className="flex-row items-center gap-2 border-b pr-12">
-        <Button variant="ghost" size="icon-sm" onClick={onBack} aria-label="All conversations">
-          <ArrowLeft />
-        </Button>
-        <SheetTitle className="line-clamp-1">{session ? sessionLabel(session) : "New conversation"}</SheetTitle>
-        <SheetDescription className="sr-only">A conversation with the Northcart assistant.</SheetDescription>
-      </SheetHeader>
-
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4" aria-live="polite">
-        {messages === null && <Skeleton data-testid="messages-skeleton" className="h-24" />}
-        {messages?.length === 0 && !sending && (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            Ask about your orders, e.g. &ldquo;Where is my last order?&rdquo;
-          </p>
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain p-4" aria-live="polite">
+        {messages === null && (
+          <>
+            <Skeleton data-testid="messages-skeleton" className="h-10 w-2/3 self-end rounded-2xl" />
+            <Skeleton className="h-20 w-4/5 rounded-2xl" />
+          </>
         )}
-        {messages?.map((message) => <MessageBubble key={message.id} message={message} />)}
-        {answering && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Spinner /> The assistant is answering…
+        {messages?.length === 0 && !sending && (
+          <div className="my-auto flex flex-col items-center gap-4 py-6 text-center">
+            <span className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Bot className="size-6" />
+            </span>
+            <div>
+              <p className="font-medium">Hi! How can we help?</p>
+              <p className="text-sm text-muted-foreground">I can look up your orders, their status and tracking.</p>
+            </div>
+            <div className="flex flex-wrap justify-center gap-2">
+              {CHAT_SUGGESTIONS.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onClick={() => void send(suggestion)}
+                  className="rounded-full border bg-card px-3 py-1.5 text-sm transition-colors hover:bg-muted"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
           </div>
         )}
+        {messages?.map((message) => <MessageBubble key={message.id} message={message} />)}
+        {(answering || sending) && <TypingBubble label={sending ? "Sending" : "The assistant is answering"} />}
         <div ref={bottomRef} />
       </div>
 
-      <form onSubmit={send} className="flex items-end gap-2 border-t p-4">
-        <Textarea
-          aria-label="Message"
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          onKeyDown={onKeyDown}
-          maxLength={MAX_CHAT_MESSAGE_LENGTH}
-          placeholder={paused ? "The assistant isn't available right now" : "Write a message…"}
-          disabled={paused}
-          rows={1}
-          className="max-h-40 min-h-10 resize-none"
-        />
-        <Button type="submit" size="icon" aria-label="Send" disabled={!input.trim() || sending || answering || paused}>
-          {sending ? <Spinner /> : <SendHorizontal />}
-        </Button>
+      <form onSubmit={onSubmit} className="border-t bg-background p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="flex items-end gap-2 rounded-2xl border bg-muted/40 p-1.5 transition-shadow focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
+          <textarea
+            ref={inputRef}
+            aria-label="Message"
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={onKeyDown}
+            maxLength={MAX_CHAT_MESSAGE_LENGTH}
+            placeholder={paused ? "The assistant isn't available right now" : "Write a message…"}
+            disabled={paused}
+            rows={1}
+            // text-base on phones: iOS zooms into inputs with smaller text.
+            className="field-sizing-content max-h-32 min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 text-base outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed sm:text-sm"
+          />
+          <Button
+            type="submit"
+            size="icon"
+            aria-label="Send"
+            className="shrink-0 rounded-full"
+            disabled={!input.trim() || sending || answering || paused}
+          >
+            {sending ? <Spinner /> : <ArrowUp />}
+          </Button>
+        </div>
+        <p className="mt-1.5 text-center text-[11px] text-muted-foreground">
+          The assistant only sees your own orders. Answers may be imperfect.
+        </p>
       </form>
     </>
   )
 }
 
+function BotAvatar() {
+  return (
+    <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+      <Bot className="size-4" />
+    </span>
+  )
+}
+
 function MessageBubble({ message }: { message: ChatMessage }) {
+  const time = new Date(message.createdAt).toLocaleString()
   if (message.role === "notice") {
     return (
-      <p className="flex items-center gap-2 self-center rounded-md bg-muted px-3 py-1.5 text-xs text-muted-foreground">
-        <Info className="size-3.5" /> {message.content}
+      <p className="flex items-center gap-1.5 self-center rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
+        <Info className="size-3.5 shrink-0" /> {message.content}
       </p>
     )
   }
-  const mine = message.role === "user"
-  return (
-    <div className={cn("flex gap-2", mine && "justify-end")}>
-      {!mine && <Bot className="mt-2 size-4 shrink-0 text-muted-foreground" aria-hidden />}
+  if (message.role === "user") {
+    return (
       <p
-        className={cn(
-          "max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap",
-          mine ? "bg-primary text-primary-foreground" : "bg-muted",
-        )}
+        title={time}
+        className="max-w-[85%] self-end rounded-2xl rounded-br-md bg-primary px-3.5 py-2 text-sm break-words whitespace-pre-wrap text-primary-foreground"
       >
         {message.content}
       </p>
+    )
+  }
+  return (
+    <div className="flex max-w-[90%] items-end gap-2 self-start" title={time}>
+      <BotAvatar />
+      <div className="min-w-0 rounded-2xl rounded-bl-md bg-muted px-3.5 py-2">
+        <ChatMarkdown>{message.content}</ChatMarkdown>
+      </div>
+    </div>
+  )
+}
+
+function TypingBubble({ label }: { label: string }) {
+  return (
+    <div className="flex items-end gap-2 self-start">
+      <BotAvatar />
+      <div role="status" aria-label={label} className="flex gap-1 rounded-2xl rounded-bl-md bg-muted px-4 py-3">
+        {[0, 150, 300].map((delay) => (
+          <span
+            key={delay}
+            className="size-1.5 animate-bounce rounded-full bg-muted-foreground/70"
+            style={{ animationDelay: `${delay}ms` }}
+          />
+        ))}
+      </div>
     </div>
   )
 }

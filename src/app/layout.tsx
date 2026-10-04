@@ -31,7 +31,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col">
         <ThemeProvider>
           {children}
-          <Toaster position="bottom-right" closeButton />
+          {/* Above the support chat bubble in the same corner. */}
+          <Toaster position="bottom-right" closeButton offset={{ bottom: "6rem" }} mobileOffset={{ bottom: "5.5rem" }} />
           <FlashToaster />
         </ThemeProvider>
       </body>
