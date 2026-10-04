@@ -7,6 +7,8 @@ import { CheckCircle2 } from "lucide-react"
 import { register } from "@/app/actions/register"
 import { Field } from "@/components/auth/field"
 import { Button, buttonVariants } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Field as UiField, FieldLabel } from "@/components/ui/field"
 import type { RegisterFormState } from "@/lib/validation/register"
 
 export function RegisterForm() {
@@ -67,6 +69,12 @@ export function RegisterForm() {
         autoComplete="new-password"
         errors={errors?.confirmPassword}
       />
+      <UiField orientation="horizontal">
+        <Checkbox id="register-newsletter" name="newsletter" defaultChecked={state?.values?.newsletter} />
+        <FieldLabel htmlFor="register-newsletter" className="font-normal">
+          Subscribe to the newsletter (10% off your first order)
+        </FieldLabel>
+      </UiField>
       {state?.message && (
         <p role="alert" className="text-sm text-destructive">
           {state.message}

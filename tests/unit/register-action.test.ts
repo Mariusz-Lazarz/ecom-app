@@ -10,6 +10,12 @@ vi.mock("@/lib/users", () => {
 // Emails are covered by email-wiring.test.ts.
 vi.mock("@/lib/mail", () => ({ sendMailLater: () => {} }))
 
+const subscribe = vi.fn()
+vi.mock("@/lib/newsletter", () => ({
+  subscribe: (...args: unknown[]) => subscribe(...args),
+  newsletterConfirmationMessage: vi.fn(),
+}))
+
 const { register } = await import("@/app/actions/register")
 const { EmailTakenError } = await import("@/lib/users")
 
@@ -30,6 +36,7 @@ function form(overrides: Record<string, string> = {}) {
 describe("register action", () => {
   beforeEach(() => {
     createUser.mockReset()
+    subscribe.mockReset().mockResolvedValue({ status: "subscribed", email: "jan@example.com", token: "t" })
   })
 
   it("creates the user with a normalized email", async () => {
@@ -57,5 +64,33 @@ describe("register action", () => {
     createUser.mockRejectedValue(new Error("db down"))
     const state = await register(undefined, form())
     expect(state).toMatchObject({ message: "Something went wrong. Please try again." })
+  })
+
+  it("doesn't subscribe to the newsletter unless the box is ticked", async () => {
+    createUser.mockResolvedValue({ id: "1", email: "jan@example.com" })
+    await register(undefined, form())
+    expect(subscribe).not.toHaveBeenCalled()
+  })
+
+  it("subscribes the normalized email from registration when the box is ticked", async () => {
+    createUser.mockResolvedValue({ id: "1", email: "jan@example.com" })
+    const state = await register(undefined, form({ newsletter: "on" }))
+    expect(state).toEqual({ success: true, firstName: "Jan" })
+    expect(subscribe).toHaveBeenCalledExactlyOnceWith("jan@example.com", "register")
+  })
+
+  it("doesn't subscribe when the registration fails, and keeps the box ticked", async () => {
+    createUser.mockRejectedValue(new EmailTakenError())
+    const state = await register(undefined, form({ newsletter: "on" }))
+    expect(subscribe).not.toHaveBeenCalled()
+    expect(state).toMatchObject({ values: { email: "Jan@Example.com", newsletter: true } })
+  })
+
+  it("still registers when the newsletter sign-up fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    createUser.mockResolvedValue({ id: "1", email: "jan@example.com" })
+    subscribe.mockRejectedValue(new Error("db down"))
+    const state = await register(undefined, form({ newsletter: "on" }))
+    expect(state).toEqual({ success: true, firstName: "Jan" })
   })
 })

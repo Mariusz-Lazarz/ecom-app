@@ -1,8 +1,15 @@
 import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
-import { Newsletter } from "@/components/home/newsletter"
+const subscribeToNewsletter = vi.hoisted(() => vi.fn())
+vi.mock("@/app/actions/newsletter", () => ({ subscribeToNewsletter }))
+
+const { Newsletter } = await import("@/components/home/newsletter")
+
+beforeEach(() => {
+  subscribeToNewsletter.mockReset()
+})
 
 describe("Newsletter", () => {
   it("advertises the first-order discount", () => {
@@ -53,5 +60,51 @@ describe("Newsletter", () => {
 
     const gift = screen.getByRole("img", { name: /gift box/i })
     expect(within(gift).getByTestId("dotlottie")).toHaveAttribute("data-src", "/animations/gift.lottie")
+  })
+
+  it("posts the typed email and swaps the form for a confirmation", async () => {
+    subscribeToNewsletter.mockResolvedValue({ success: true, email: "shopper@example.com" })
+    const user = userEvent.setup()
+    render(<Newsletter />)
+
+    await user.type(screen.getByLabelText("Email address"), "Shopper@Example.com")
+    await user.click(screen.getByRole("button", { name: "Subscribe" }))
+
+    const status = await screen.findByRole("status")
+    expect(status).toHaveTextContent("You're on the list!")
+    expect(status).toHaveTextContent("We've sent a confirmation with your welcome code to shopper@example.com.")
+    expect(screen.queryByLabelText("Email address")).not.toBeInTheDocument()
+    expect(subscribeToNewsletter).toHaveBeenCalledOnce()
+    expect((subscribeToNewsletter.mock.calls[0][1] as FormData).get("email")).toBe("Shopper@Example.com")
+  })
+
+  it("shows the action's field error inline and keeps the typed email", async () => {
+    subscribeToNewsletter.mockResolvedValue({ errors: { email: ["Please enter a valid email."] }, values: { email: "nope@" } })
+    const user = userEvent.setup()
+    render(<Newsletter />)
+
+    await user.type(screen.getByLabelText("Email address"), "nope@")
+    await user.click(screen.getByRole("button", { name: "Subscribe" }))
+
+    const alert = await screen.findByRole("alert")
+    expect(alert).toHaveTextContent("Please enter a valid email.")
+    const email = screen.getByLabelText("Email address")
+    expect(email).toHaveValue("nope@")
+    expect(email).toHaveAttribute("aria-invalid", "true")
+    expect(email).toHaveAccessibleDescription("Please enter a valid email.")
+    expect(screen.queryByRole("status")).not.toBeInTheDocument()
+  })
+
+  it("shows a form-level failure message and lets the visitor try again", async () => {
+    subscribeToNewsletter.mockResolvedValue({ message: "Something went wrong. Please try again.", values: { email: "a@b.co" } })
+    const user = userEvent.setup()
+    render(<Newsletter />)
+
+    await user.type(screen.getByLabelText("Email address"), "a@b.co")
+    await user.click(screen.getByRole("button", { name: "Subscribe" }))
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Something went wrong. Please try again.")
+    expect(screen.getByRole("button", { name: "Subscribe" })).toBeEnabled()
+    expect(screen.getByLabelText("Email address")).toHaveValue("a@b.co")
   })
 })

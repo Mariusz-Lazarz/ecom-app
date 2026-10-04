@@ -1,3 +1,4 @@
+export { newsletterConfirmationEmail } from "@/emails/newsletter"
 export { orderConfirmationEmail } from "@/emails/order-confirmation"
 export { isEmailedOrderStatus, orderStatusEmail, type EmailedOrderStatus } from "@/emails/order-status"
 export type { EmailOrder } from "@/emails/order-parts"

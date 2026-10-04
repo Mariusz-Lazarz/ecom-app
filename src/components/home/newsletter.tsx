@@ -1,6 +1,5 @@
+import { NewsletterForm } from "@/components/newsletter/newsletter-form"
 import { LottieAnimation } from "@/components/lottie-animation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 
 export function Newsletter() {
   return (
@@ -12,21 +11,7 @@ export function Newsletter() {
             Join the Northcart list for early access to drops, members-only deals and a welcome
             gift in your inbox.
           </p>
-          <form className="flex max-w-md flex-col gap-2 sm:flex-row">
-            <label htmlFor="newsletter-email" className="sr-only">
-              Email address
-            </label>
-            <Input
-              id="newsletter-email"
-              type="email"
-              required
-              placeholder="you@example.com"
-              className="h-10 border-primary-foreground/20 bg-primary-foreground/10 text-primary-foreground placeholder:text-primary-foreground/50"
-            />
-            <Button type="submit" variant="secondary" className="h-10 px-4">
-              Subscribe
-            </Button>
-          </form>
+          <NewsletterForm />
         </div>
         <LottieAnimation
           src="/animations/gift.lottie"
