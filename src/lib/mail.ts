@@ -8,7 +8,7 @@ import { logger } from "@/lib/logger"
 
 /**
  * Outgoing email over SMTP (Mailpit locally, any SMTP provider in production), configured from
- * `SMTP_HOST`, `SMTP_PORT`, optional `SMTP_USER` / `SMTP_PASS` / `SMTP_SECURE` and `MAIL_FROM`.
+ * `SMTP_HOST`, `SMTP_PORT`, optional `SMTP_USER` / `SMTP_PASS` / `SMTP_SECURE`, `MAIL_FROM` and `SUPPORT_EMAIL`.
  *
  * Without `SMTP_HOST` nothing is sent: the email's recipient and subject are logged at info
  * instead, so the build, CI and unit tests run without a mail server. Sending never throws:
@@ -20,6 +20,12 @@ const log = logger.child({ scope: "mail" })
 export type MailMessage = { to: string; subject: string; html: string; text: string }
 
 const DEFAULT_FROM = "Northcart <no-reply@northcart.test>"
+const DEFAULT_SUPPORT_INBOX = "support@northcart.test"
+
+/** Where the shop's own notifications go (new contact messages): `SUPPORT_EMAIL`, or support@northcart.test. */
+export function supportInbox() {
+  return process.env.SUPPORT_EMAIL?.trim() || DEFAULT_SUPPORT_INBOX
+}
 
 type MailConfig = {
   host: string

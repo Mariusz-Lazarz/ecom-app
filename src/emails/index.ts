@@ -1,3 +1,4 @@
+export { contactAutoReplyEmail, contactNotificationEmail, type EmailContactMessage } from "@/emails/contact"
 export { newsletterConfirmationEmail } from "@/emails/newsletter"
 export { orderConfirmationEmail } from "@/emails/order-confirmation"
 export { isEmailedOrderStatus, orderStatusEmail, type EmailedOrderStatus } from "@/emails/order-status"
