@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react"
+import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -7,7 +7,7 @@ import type { ChatMessage, ChatSession } from "@/lib/harnesslab"
 const notify = { success: vi.fn(), warning: vi.fn(), error: vi.fn() }
 vi.mock("@/lib/notify", () => ({ notify }))
 
-const { SupportChat, CHAT_POLL_MS } = await import("@/components/support-chat/support-chat")
+const { SupportChat, CHAT_POLL_MS, CHAT_SUGGESTIONS } = await import("@/components/support-chat/support-chat")
 
 const fetchMock = vi.fn<typeof fetch>()
 
@@ -33,7 +33,17 @@ function serve(routes: [method: string, path: RegExp, respond: () => Response][]
   })
 }
 
-const calls = () => fetchMock.mock.calls.map(([input, init]) => `${init?.method ?? "GET"} ${String(input)}`)
+const posts = () =>
+  fetchMock.mock.calls
+    .filter(([, init]) => init?.method === "POST")
+    .map(([input, init]) => ({ url: String(input), body: init?.body ? JSON.parse(String(init.body)) : undefined }))
+
+const panel = () => screen.getByRole("dialog", { hidden: true })
+
+async function openChat(user = userEvent.setup()) {
+  await user.click(screen.getByRole("button", { name: "Chat with us" }))
+  return user
+}
 
 beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock)
@@ -45,22 +55,55 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe("SupportChat", () => {
-  it("lists the customer's conversations when opened", async () => {
-    serve([["GET", /\/api\/chat\/sessions$/, () => Response.json({ sessions: [chatSession(), chatSession({ id: "b", title: null })] })]])
+describe("SupportChat bubble", () => {
+  it("is a floating button that opens and closes the panel", async () => {
+    serve([["GET", /\/api\/chat\/sessions$/, () => Response.json({ sessions: [chatSession()] })]])
     render(<SupportChat />)
 
-    await userEvent.click(screen.getByRole("button", { name: "Chat with us" }))
+    const bubble = screen.getByRole("button", { name: "Chat with us" })
+    expect(bubble).toHaveAttribute("aria-expanded", "false")
+    expect(panel()).toHaveAttribute("aria-hidden", "true")
 
-    expect(await screen.findByText("Where is my order?")).toBeInTheDocument()
-    expect(screen.getByText("New conversation", { selector: "span" })).toBeInTheDocument()
+    await openChat()
+    expect(bubble).toHaveAttribute("aria-expanded", "true")
+    expect(bubble).toHaveAccessibleName("Close chat")
+    expect(screen.getByRole("dialog", { name: "Northcart assistant" })).toBeVisible()
+
+    await userEvent.click(bubble)
+    expect(panel()).toHaveAttribute("aria-hidden", "true")
   })
 
-  it("says so when there are no conversations yet", async () => {
+  it("closes with Escape and gives the focus back to the bubble", async () => {
+    serve([["GET", /\/api\/chat\/sessions$/, () => Response.json({ sessions: [chatSession()] })]])
+    render(<SupportChat />)
+    const user = await openChat()
+    await screen.findByText("Where is my order?")
+
+    await user.keyboard("{Escape}")
+
+    expect(panel()).toHaveAttribute("aria-hidden", "true")
+    expect(screen.getByRole("button", { name: "Chat with us" })).toHaveFocus()
+  })
+})
+
+describe("SupportChat conversations", () => {
+  it("lists the customer's recent conversations", async () => {
+    serve([["GET", /\/api\/chat\/sessions$/, () => Response.json({ sessions: [chatSession(), chatSession({ id: "b", title: null })] })]])
+    render(<SupportChat />)
+    await openChat()
+
+    expect(await screen.findByText("Where is my order?")).toBeInTheDocument()
+    expect(screen.getByText("Recent conversations")).toBeInTheDocument()
+    expect(screen.getByText("New conversation")).toBeInTheDocument()
+  })
+
+  it("goes straight to a new conversation with suggestions when there are none", async () => {
     serve([["GET", /\/api\/chat\/sessions$/, () => Response.json({ sessions: [] })]])
     render(<SupportChat />)
-    await userEvent.click(screen.getByRole("button", { name: "Chat with us" }))
-    expect(await screen.findByText("No conversations yet.")).toBeInTheDocument()
+    await openChat()
+
+    expect(await screen.findByText("Hi! How can we help?")).toBeInTheDocument()
+    for (const suggestion of CHAT_SUGGESTIONS) expect(screen.getByRole("button", { name: suggestion })).toBeInTheDocument()
   })
 
   it("creates the conversation with the first message, then polls until the reply arrives", async () => {
@@ -85,37 +128,95 @@ describe("SupportChat", () => {
           polls += 1
           return polls === 1
             ? Response.json({ messages: [], hasMore: false, session: chatSession({ status: "running" }) })
-            : Response.json({ messages: [message("2", "assistant", "It shipped yesterday.")], hasMore: false, session: chatSession() })
+            : Response.json({
+                messages: [message("2", "assistant", "It **shipped** yesterday.")],
+                hasMore: false,
+                session: chatSession(),
+              })
         },
       ],
     ])
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     render(<SupportChat />)
-    await user.click(screen.getByRole("button", { name: "Chat with us" }))
-    await user.click(await screen.findByRole("button", { name: /New conversation/ }))
+    await openChat(user)
 
-    await user.type(screen.getByRole("textbox", { name: "Message" }), "  Where is NC-10001?  {Enter}")
+    await user.type(await screen.findByRole("textbox", { name: "Message" }), "  Where is NC-10001?  {Enter}")
 
     expect(await screen.findByText("Where is NC-10001?")).toBeInTheDocument()
-    expect(screen.getByText("The assistant is answering…")).toBeInTheDocument()
+    expect(screen.getByRole("status", { name: "The assistant is answering" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled()
-    const post = fetchMock.mock.calls.find(([input, init]) => init?.method === "POST" && String(input).endsWith("/messages"))
-    expect(JSON.parse(String(post![1]!.body))).toEqual({ message: "Where is NC-10001?" })
 
     await act(() => vi.advanceTimersByTimeAsync(CHAT_POLL_MS * 2))
-    expect(await screen.findByText("It shipped yesterday.")).toBeInTheDocument()
-    expect(screen.queryByText("The assistant is answering…")).not.toBeInTheDocument()
+    const reply = await screen.findByText(/It/, { selector: "p" })
+    expect(within(reply).getByText("shipped").tagName).toBe("STRONG")
+    expect(screen.queryByRole("status", { name: "The assistant is answering" })).not.toBeInTheDocument()
 
     // Done answering: no more polling.
     await act(() => vi.advanceTimersByTimeAsync(CHAT_POLL_MS * 3))
     expect(polls).toBe(2)
-    expect(calls().filter((call) => call.startsWith("POST"))).toEqual([
-      "POST /api/chat/sessions",
-      "POST /api/chat/sessions/a1b2c3d4/messages",
+    expect(posts()).toEqual([
+      { url: "/api/chat/sessions", body: undefined },
+      { url: "/api/chat/sessions/a1b2c3d4/messages", body: { message: "Where is NC-10001?" } },
     ])
   })
 
-  it("opens a conversation with its messages and notices", async () => {
+  it("sends a suggestion when it is clicked", async () => {
+    serve([
+      ["GET", /\/api\/chat\/sessions$/, () => Response.json({ sessions: [] })],
+      ["POST", /\/api\/chat\/sessions$/, () => Response.json({ session: chatSession() }, { status: 201 })],
+      [
+        "POST",
+        /\/messages$/,
+        () => Response.json({ message: message("1", "user", CHAT_SUGGESTIONS[0]), session: chatSession({ status: "running" }) }),
+      ],
+      ["GET", /\/messages\?after=1$/, () => Response.json({ messages: [], hasMore: false, session: chatSession({ status: "running" }) })],
+    ])
+    render(<SupportChat />)
+    const user = await openChat()
+
+    await user.click(await screen.findByRole("button", { name: CHAT_SUGGESTIONS[0] }))
+
+    await waitFor(() => expect(posts()[1]).toEqual({ url: "/api/chat/sessions/a1b2c3d4/messages", body: { message: CHAT_SUGGESTIONS[0] } }))
+  })
+
+  it("renders the assistant's Markdown: lists, links and tables, but no raw HTML", async () => {
+    const reply = [
+      "Your orders:",
+      "",
+      "- **NC-1010**: Processing",
+      "- NC-1004: Delivered",
+      "",
+      "| Order | Total |",
+      "| --- | --- |",
+      "| NC-1010 | $179.00 |",
+      "",
+      "[Track it](https://example.com/track) <img src=x onerror=alert(1)>",
+    ].join("\n")
+    serve([
+      ["GET", /\/api\/chat\/sessions$/, () => Response.json({ sessions: [chatSession()] })],
+      [
+        "GET",
+        /\/a1b2c3d4\/messages$/,
+        () => Response.json({ messages: [message("1", "user", "My orders?"), message("2", "assistant", reply)], hasMore: false, session: chatSession() }),
+      ],
+    ])
+    render(<SupportChat />)
+    const user = await openChat()
+    await user.click(await screen.findByText("Where is my order?"))
+
+    const items = await screen.findAllByRole("listitem")
+    expect(items.map((item) => item.textContent)).toEqual(["NC-1010: Processing", "NC-1004: Delivered"])
+    expect(screen.getByRole("table")).toHaveTextContent("NC-1010$179.00")
+    const link = screen.getByRole("link", { name: "Track it" })
+    expect(link).toHaveAttribute("href", "https://example.com/track")
+    expect(link).toHaveAttribute("target", "_blank")
+    expect(link).toHaveAttribute("rel", "noopener noreferrer")
+    expect(document.querySelector("img")).toBeNull()
+    // The customer's own message stays plain text.
+    expect(screen.getByText("My orders?").tagName).toBe("P")
+  })
+
+  it("shows notices and goes back to the list", async () => {
     serve([
       ["GET", /\/api\/chat\/sessions$/, () => Response.json({ sessions: [chatSession()] })],
       [
@@ -130,14 +231,13 @@ describe("SupportChat", () => {
       ],
     ])
     render(<SupportChat />)
-    await userEvent.click(screen.getByRole("button", { name: "Chat with us" }))
-    await userEvent.click(await screen.findByText("Where is my order?"))
+    const user = await openChat()
+    await user.click(await screen.findByText("Where is my order?"))
 
-    expect(await screen.findByText("Hi")).toBeInTheDocument()
-    expect(screen.getByText("Sorry, something went wrong while answering.")).toBeInTheDocument()
+    expect(await screen.findByText("Sorry, something went wrong while answering.")).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole("button", { name: "All conversations" }))
-    expect(await screen.findByRole("button", { name: /New conversation/ })).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "All conversations" }))
+    expect(await screen.findByText("Recent conversations")).toBeInTheDocument()
   })
 
   it("disables writing while the assistant is unavailable", async () => {
@@ -146,8 +246,8 @@ describe("SupportChat", () => {
       ["GET", /\/messages$/, () => Response.json({ messages: [], hasMore: false, session: chatSession({ status: "paused" }) })],
     ])
     render(<SupportChat />)
-    await userEvent.click(screen.getByRole("button", { name: "Chat with us" }))
-    await userEvent.click(await screen.findByText("Where is my order?"))
+    const user = await openChat()
+    await user.click(await screen.findByText("Where is my order?"))
 
     await waitFor(() => expect(screen.getByRole("textbox", { name: "Message" })).toBeDisabled())
     expect(screen.getByPlaceholderText("The assistant isn't available right now")).toBeInTheDocument()
@@ -156,7 +256,7 @@ describe("SupportChat", () => {
   it("keeps the typed message and shows an error when sending fails", async () => {
     serve([
       ["GET", /\/api\/chat\/sessions$/, () => Response.json({ sessions: [chatSession()] })],
-      ["GET", /\/messages$/, () => Response.json({ messages: [], hasMore: false, session: chatSession() })],
+      ["GET", /\/messages$/, () => Response.json({ messages: [message("1", "user", "Earlier")], hasMore: false, session: chatSession() })],
       [
         "POST",
         /\/messages$/,
@@ -164,11 +264,12 @@ describe("SupportChat", () => {
       ],
     ])
     render(<SupportChat />)
-    await userEvent.click(screen.getByRole("button", { name: "Chat with us" }))
-    await userEvent.click(await screen.findByText("Where is my order?"))
-    const box = await screen.findByRole("textbox", { name: "Message" })
+    const user = await openChat()
+    await user.click(await screen.findByText("Where is my order?"))
+    await screen.findByText("Earlier")
+    const box = screen.getByRole("textbox", { name: "Message" })
 
-    await userEvent.type(box, "Hello{Enter}")
+    await user.type(box, "Hello{Enter}")
 
     await waitFor(() =>
       expect(notify.error).toHaveBeenCalledWith("Your message wasn't sent", { description: "The assistant is still answering" }),
