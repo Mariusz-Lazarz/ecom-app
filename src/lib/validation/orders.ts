@@ -63,3 +63,36 @@ export const OrderListQuerySchema = z.object({
 })
 
 export type OrderListQuery = z.output<typeof OrderListQuerySchema>
+
+// A calendar day that exists (2026-02-30 doesn't).
+const isRealDay = (value: string) => {
+  const date = new Date(`${value}T00:00:00Z`)
+  return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(value)
+}
+
+const day = (label: string) =>
+  param(
+    z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, { error: `${label} must be a date like 2026-01-31.` })
+      .refine(isRealDay, { error: `${label} isn't a real date.` })
+      .optional(),
+  )
+
+/**
+ * The orders CSV export's filters (`/api/admin/orders/export`): the list's status and search, plus
+ * `from` / `to` UTC days (`YYYY-MM-DD`, both inclusive).
+ */
+export const OrderExportQuerySchema = z
+  .object({
+    status: param(z.enum(ORDER_STATUSES, { error: "Choose a valid status." }).optional()),
+    q: param(z.string().max(100, { error: "Search must be at most 100 characters." }).optional()),
+    from: day("From"),
+    to: day("To"),
+  })
+  .refine((data) => !data.from || !data.to || data.from <= data.to, {
+    error: "From must not be after To.",
+    path: ["to"],
+  })
+
+export type OrderExportQuery = z.output<typeof OrderExportQuerySchema>

@@ -679,6 +679,91 @@ export async function listOrders(options: OrderListOptions = {}): Promise<Page<A
   return toPage(rows.map(toAdminSummary), total, current, size)
 }
 
+export type OrderExportRow = {
+  number: string
+  createdAt: Date
+  customerName: string
+  customerEmail: string
+  status: OrderStatus
+  itemCount: number
+  subtotalCents: number
+  discountCode: string | null
+  discountCents: number
+  shippingCents: number
+  totalCents: number
+  currency: string
+}
+
+export type OrderExportOptions = {
+  status?: OrderStatus
+  // Part of an order number or customer email, like `listOrders`.
+  q?: string
+  // Whole UTC days (`YYYY-MM-DD`), both inclusive.
+  from?: string
+  to?: string
+}
+
+/** Every order matching the filters, oldest first, for the admin CSV export. */
+export async function listOrdersForExport(options: OrderExportOptions = {}): Promise<OrderExportRow[]> {
+  const where: string[] = []
+  const params: unknown[] = []
+  if (options.status) {
+    params.push(options.status)
+    where.push(`o.status = $${params.length}`)
+  }
+  const q = options.q?.trim()
+  if (q) {
+    params.push(`%${escapeLike(q)}%`)
+    where.push(`(o.number ILIKE $${params.length} OR u.email ILIKE $${params.length})`)
+  }
+  if (options.from) {
+    params.push(`${options.from}T00:00:00Z`)
+    where.push(`o.created_at >= $${params.length}::timestamptz`)
+  }
+  if (options.to) {
+    params.push(`${options.to}T00:00:00Z`)
+    where.push(`o.created_at < $${params.length}::timestamptz + interval '1 day'`)
+  }
+
+  const { rows } = await query<{
+    number: string
+    created_at: Date
+    first_name: string
+    last_name: string
+    email: string
+    status: OrderStatus
+    item_count: number
+    subtotal_cents: number
+    discount_code: string | null
+    discount_cents: number
+    shipping_cents: number
+    total_cents: number
+    currency: string
+  }>(
+    `SELECT o.number, o.created_at, u.first_name, u.last_name, u.email, o.status,
+            (SELECT COALESCE(SUM(quantity), 0)::int FROM order_items WHERE order_id = o.id) AS item_count,
+            o.subtotal_cents, o.discount_code, o.discount_cents, o.shipping_cents, o.total_cents, o.currency
+     FROM orders o JOIN users u ON u.id = o.user_id
+     ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+     ORDER BY o.created_at, o.number`,
+    params,
+  )
+  return rows.map((row) => ({
+    number: row.number,
+    createdAt: row.created_at,
+    customerName: `${row.first_name} ${row.last_name}`.trim(),
+    customerEmail: row.email,
+    status: row.status,
+    itemCount: row.item_count,
+    subtotalCents: row.subtotal_cents,
+    discountCode: row.discount_code,
+    discountCents: row.discount_cents,
+    shippingCents: row.shipping_cents,
+    totalCents: row.total_cents,
+    currency: row.currency,
+  }))
+}
+
 /** Statuses an order waits in for the shop to act: the admin dashboard's "Needs attention" list. */
 export const AWAITING_ACTION_STATUSES: readonly OrderStatus[] = ["pending", "processing"]
 

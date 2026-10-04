@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { ArrowRight } from "lucide-react"
 
+import { RevenueTrendCard } from "@/components/admin/analytics/revenue-trend-card"
 import { LatestReviews } from "@/components/admin/latest-reviews"
 import { LowStockProducts } from "@/components/admin/low-stock-products"
 import { NewMessages } from "@/components/admin/new-messages"
@@ -9,10 +10,12 @@ import { OrderStatCards } from "@/components/admin/order-stats"
 import { OrdersAwaitingAction } from "@/components/admin/orders-awaiting-action"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { recentDays } from "@/lib/admin-analytics"
 import { adminMessagesHref } from "@/lib/admin-messages"
 import { adminOrdersHref } from "@/lib/admin-orders"
 import { adminProductsHref } from "@/lib/admin-product-list"
 import { listLowStockProducts } from "@/lib/admin-products"
+import { getRevenueTrend } from "@/lib/analytics"
 import { requireAdmin } from "@/lib/auth-guards"
 import { countNewContactMessages, listNewContactMessages } from "@/lib/contact"
 import { getOrderStats, listOrdersAwaitingAction } from "@/lib/orders"
@@ -25,15 +28,18 @@ const AWAITING_ACTION_LIMIT = 5
 const LOW_STOCK_LIMIT = 5
 const LATEST_REVIEWS_LIMIT = 5
 const NEW_MESSAGES_LIMIT = 5
+const DASHBOARD_TREND_DAYS = 30
 
 /**
- * The admin dashboard: order numbers, the oldest orders waiting to be processed or shipped, the
- * newest unread contact messages, the products with the least stock and the latest reviews.
+ * The admin dashboard: order numbers, revenue over the last 30 days (linking to analytics), the
+ * oldest orders waiting to be processed or shipped, the newest unread contact messages, the
+ * products with the least stock and the latest reviews.
  */
 export default async function AdminDashboardPage() {
   await requireAdmin("/admin")
-  const [stats, awaiting, lowStock, latestReviews, newMessages, newMessageCount] = await Promise.all([
+  const [stats, trend, awaiting, lowStock, latestReviews, newMessages, newMessageCount] = await Promise.all([
     getOrderStats(),
+    getRevenueTrend(recentDays(DASHBOARD_TREND_DAYS)),
     listOrdersAwaitingAction(AWAITING_ACTION_LIMIT),
     listLowStockProducts(LOW_STOCK_LIMIT),
     listLatestReviews(LATEST_REVIEWS_LIMIT),
@@ -46,6 +52,8 @@ export default async function AdminDashboardPage() {
       <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
 
       <OrderStatCards stats={stats} />
+
+      <RevenueTrendCard trend={trend} />
 
       <Card>
         <CardHeader>
