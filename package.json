@@ -12,15 +12,18 @@
     "test:e2e": "playwright test",
     "test:integration": "vitest run --config vitest.integration.config.mts",
     "db:migrate": "node --env-file=.env.local scripts/db-migrate.mjs",
-    "db:seed": "tsx --env-file=.env.local --conditions=react-server scripts/db-seed.mjs"
+    "db:seed": "tsx --env-file=.env.local --conditions=react-server scripts/db-seed.mjs",
+    "agent:keygen": "node scripts/agent-keygen.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1142.0",
     "@base-ui/react": "^1.8.0",
     "@lottiefiles/dotlottie-react": "^0.19.16",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.4.0",
+    "jose": "^6.2.12",
     "lucide-react": "^1.48.0",
     "next": "16.3.6",
     "next-auth": "^5.0.0-beta.32",

@@ -6,6 +6,7 @@ import { auth } from "@/auth"
 import { CartSheet } from "@/components/cart/cart-sheet"
 import { HeaderSearch } from "@/components/header-search"
 import { MobileNav } from "@/components/mobile-nav"
+import { SupportChat } from "@/components/support-chat/support-chat"
 import { ThemeToggle } from "@/components/theme/theme-toggle"
 import { buttonVariants } from "@/components/ui/button"
 import { getCartCount } from "@/lib/cart"
@@ -100,6 +101,7 @@ export async function SiteHeader() {
               )}
             </Link>
           )}
+          {session && <SupportChat />}
           <Link
             href={session ? "/account" : "/login"}
             aria-label="Account"
