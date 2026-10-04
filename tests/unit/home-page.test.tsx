@@ -7,6 +7,8 @@ vi.mock("@/components/site-header", () => ({ SiteHeader: () => <header /> }))
 vi.mock("@/components/home/categories-section", () => ({
   CategoriesSection: () => <section><h2>Shop by category</h2></section>,
 }))
+// HeroStats is an async Server Component (reads the database) and has its own tests.
+vi.mock("@/components/home/hero-stats", () => ({ HeroStats: () => null }))
 // FeaturedProducts is an async Server Component (reads the database) and has its own tests.
 vi.mock("@/components/home/featured-products", () => ({
   FeaturedProducts: () => <section><h2>Featured products</h2></section>,

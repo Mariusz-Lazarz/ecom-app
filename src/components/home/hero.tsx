@@ -1,15 +1,10 @@
 import Link from "next/link"
 import { ArrowRight, Star } from "lucide-react"
 
+import { HeroStats } from "@/components/home/hero-stats"
 import { LottieAnimation } from "@/components/lottie-animation"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
-
-const stats = [
-  { value: "50k+", label: "Happy customers" },
-  { value: "2–4 days", label: "Average delivery" },
-  { value: "4.8/5", label: "Store rating" },
-]
 
 export function Hero() {
   return (
@@ -38,14 +33,7 @@ export function Hero() {
               Browse categories
             </Link>
           </div>
-          <dl className="grid max-w-md grid-cols-3 gap-4 pt-4">
-            {stats.map((stat) => (
-              <div key={stat.label}>
-                <dt className="text-xs text-muted-foreground">{stat.label}</dt>
-                <dd className="text-xl font-semibold">{stat.value}</dd>
-              </div>
-            ))}
-          </dl>
+          <HeroStats />
         </div>
         <LottieAnimation
           src="/animations/hero-shopping.lottie"
