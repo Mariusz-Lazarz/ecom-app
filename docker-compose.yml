@@ -34,6 +34,16 @@ services:
     volumes:
       - s3-data:/data
 
+  # Catches every email the app sends locally (SMTP on 1025) and shows it in a web UI on 8025,
+  # with an HTTP API the e2e tests read messages from. Nothing is delivered to real inboxes.
+  mail:
+    image: axllent/mailpit:latest
+    container_name: ecom-mail
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+
 volumes:
   db-data:
   s3-data:
