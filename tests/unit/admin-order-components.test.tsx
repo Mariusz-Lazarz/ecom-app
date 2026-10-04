@@ -212,6 +212,9 @@ describe("AdminNav", () => {
     ["/admin/reviews", "Reviews"],
     ["/admin/discounts", "Discounts"],
     ["/admin/discounts/new", "Discounts"],
+    ["/admin/messages", "Messages"],
+    ["/admin/messages/0b0c4d4e-1111-4222-8333-444455556666", "Messages"],
+    ["/admin/newsletter", "Newsletter"],
   ])("on %s marks %s as the current section", (path, current) => {
     pathname.current = path
     render(<AdminNav />)
@@ -223,7 +226,33 @@ describe("AdminNav", () => {
       ["Products", "/admin/products"],
       ["Reviews", "/admin/reviews"],
       ["Discounts", "/admin/discounts"],
+      ["Messages", "/admin/messages"],
+      ["Newsletter", "/admin/newsletter"],
     ])
     expect(links.filter((l) => l.getAttribute("aria-current") === "page").map((l) => l.textContent)).toEqual([current])
+  })
+
+  it("shows no unread badge without unread messages", () => {
+    pathname.current = "/admin"
+    render(<AdminNav unreadMessages={0} />)
+
+    expect(screen.queryByTestId("unread-messages")).not.toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Messages" })).toHaveAttribute("href", "/admin/messages")
+  })
+
+  it("badges Messages with the unread count and says it in the link's name", () => {
+    pathname.current = "/admin"
+    render(<AdminNav unreadMessages={3} />)
+
+    expect(screen.getByTestId("unread-messages")).toHaveTextContent("3")
+    expect(screen.getByRole("link", { name: "Messages, 3 unread" })).toHaveAttribute("href", "/admin/messages")
+  })
+
+  it("caps the badge at 99+", () => {
+    pathname.current = "/admin"
+    render(<AdminNav unreadMessages={100} />)
+
+    expect(screen.getByTestId("unread-messages")).toHaveTextContent("99+")
+    expect(screen.getByRole("link", { name: "Messages, 100 unread" })).toBeInTheDocument()
   })
 })

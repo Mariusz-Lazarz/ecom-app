@@ -4,14 +4,17 @@ import { ArrowRight } from "lucide-react"
 
 import { LatestReviews } from "@/components/admin/latest-reviews"
 import { LowStockProducts } from "@/components/admin/low-stock-products"
+import { NewMessages } from "@/components/admin/new-messages"
 import { OrderStatCards } from "@/components/admin/order-stats"
 import { OrdersAwaitingAction } from "@/components/admin/orders-awaiting-action"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { adminMessagesHref } from "@/lib/admin-messages"
 import { adminOrdersHref } from "@/lib/admin-orders"
 import { adminProductsHref } from "@/lib/admin-product-list"
 import { listLowStockProducts } from "@/lib/admin-products"
 import { requireAdmin } from "@/lib/auth-guards"
+import { countNewContactMessages, listNewContactMessages } from "@/lib/contact"
 import { getOrderStats, listOrdersAwaitingAction } from "@/lib/orders"
 import { listLatestReviews } from "@/lib/reviews"
 import { adminReviewsHref } from "@/lib/review-utils"
@@ -21,18 +24,21 @@ export const metadata: Metadata = { title: "Dashboard — Admin — Northcart" }
 const AWAITING_ACTION_LIMIT = 5
 const LOW_STOCK_LIMIT = 5
 const LATEST_REVIEWS_LIMIT = 5
+const NEW_MESSAGES_LIMIT = 5
 
 /**
  * The admin dashboard: order numbers, the oldest orders waiting to be processed or shipped, the
- * products with the least stock and the latest reviews.
+ * newest unread contact messages, the products with the least stock and the latest reviews.
  */
 export default async function AdminDashboardPage() {
   await requireAdmin("/admin")
-  const [stats, awaiting, lowStock, latestReviews] = await Promise.all([
+  const [stats, awaiting, lowStock, latestReviews, newMessages, newMessageCount] = await Promise.all([
     getOrderStats(),
     listOrdersAwaitingAction(AWAITING_ACTION_LIMIT),
     listLowStockProducts(LOW_STOCK_LIMIT),
     listLatestReviews(LATEST_REVIEWS_LIMIT),
+    listNewContactMessages(NEW_MESSAGES_LIMIT),
+    countNewContactMessages(),
   ])
 
   return (
@@ -54,6 +60,26 @@ export default async function AdminDashboardPage() {
         </CardHeader>
         <CardContent>
           <OrdersAwaitingAction orders={awaiting} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg font-semibold">New messages</CardTitle>
+          <CardDescription>
+            {newMessageCount === 0
+              ? "Every contact message has been read."
+              : `${newMessageCount} unread ${newMessageCount === 1 ? "message" : "messages"} from the contact form.`}
+          </CardDescription>
+          <CardAction>
+            <Link href={adminMessagesHref()} className={buttonVariants({ variant: "ghost", size: "sm" })}>
+              All messages
+              <ArrowRight data-icon="inline-end" />
+            </Link>
+          </CardAction>
+        </CardHeader>
+        <CardContent>
+          <NewMessages messages={newMessages} />
         </CardContent>
       </Card>
 
