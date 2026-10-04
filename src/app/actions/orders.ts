@@ -5,9 +5,11 @@ import { redirect } from "next/navigation"
 import * as z from "zod"
 
 import { auth } from "@/auth"
+import { isEmailedOrderStatus, orderConfirmationEmail, orderStatusEmail } from "@/emails"
 import * as addresses from "@/lib/addresses"
 import { AppError, GENERIC_MESSAGE, logError } from "@/lib/errors"
 import { flash } from "@/lib/flash"
+import { sendMailLater } from "@/lib/mail"
 import type { OrderStatus } from "@/lib/order-rules"
 import * as orders from "@/lib/orders"
 import { AddressIdSchema } from "@/lib/validation/addresses"
@@ -28,6 +30,9 @@ import {
  * Order Server Actions. The session is read here, never taken from the client, and roles are
  * re-checked on every call. Expected failures come back as a `message` (the domain error's text);
  * anything else is logged and reported with a generic message.
+ *
+ * Placing an order and every status change email the order's customer after the response
+ * (`sendMailLater`); the email reads the order then, and failing to send it never fails the action.
  */
 
 const CHECKOUT_FIELDS = [
@@ -56,6 +61,15 @@ export type OrderActionResult = {
   order?: { number: string; status: OrderStatus; trackingNumber: string | null }
 }
 
+/** Emails the order's customer about its new status (nothing for `pending`). */
+function emailStatusChange(number: string, status: OrderStatus, options: { note?: string | null; byCustomer?: boolean }) {
+  if (!isEmailedOrderStatus(status)) return
+  sendMailLater("order-status", async () => {
+    const order = await orders.getOrder(number)
+    return order ? { to: order.customer.email, ...orderStatusEmail({ order, status, ...options }) } : null
+  })
+}
+
 function expectedMessage(err: unknown, scope: string) {
   logError(err, scope)
   return err instanceof AppError && err.status < 500 ? err.message : GENERIC_MESSAGE
@@ -70,7 +84,7 @@ function expectedMessage(err: unknown, scope: string) {
  * `saveAddress=on` a new address is also saved to the account once the order is placed; failing to
  * save it doesn't undo the order, the toast just says so. The order snapshots the address either way.
  *
- * On success it queues a toast and redirects to `/orders/<number>`; otherwise it returns `errors`
+ * On success it queues a toast and the confirmation email and redirects to `/orders/<number>`; otherwise it returns `errors`
  * (invalid fields) or a `message` (empty cart, stock problems…) with the typed `values`.
  */
 export async function placeOrder(_state: CheckoutFormState, formData: FormData): Promise<CheckoutFormState> {
@@ -110,6 +124,11 @@ export async function placeOrder(_state: CheckoutFormState, formData: FormData):
     refresh()
     return { message: expectedMessage(err, "orders.place"), values }
   }
+
+  sendMailLater("order-confirmation", async () => {
+    const order = await orders.getOrder(number)
+    return order ? { to: order.customer.email, ...orderConfirmationEmail(order) } : null
+  })
 
   let description = `Thanks! Your order ${number} is confirmed.`
   if (!savedId && values.saveAddress === "on") {
@@ -153,6 +172,7 @@ export async function cancelOrder(number: string): Promise<OrderActionResult> {
 
   try {
     const result = await orders.cancelOrderAsCustomer(userId, parsedNumber.data)
+    emailStatusChange(result.number, result.status, { byCustomer: true })
     refresh()
     return {
       ok: true,
@@ -212,6 +232,7 @@ export async function changeOrderStatus(
 
   try {
     const result = await orders.changeOrderStatus(parsedNumber.data, parsed.data, { userId, role: "admin" })
+    emailStatusChange(result.number, result.status, { note: parsed.data.note })
     refresh()
     return {
       ok: true,

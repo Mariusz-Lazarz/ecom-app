@@ -27,13 +27,20 @@ export function LoginForm({ callbackUrl }: { callbackUrl?: string | null }) {
         defaultValue={state?.values?.email}
         errors={errors?.email}
       />
-      <Field
-        name="password"
-        label="Password"
-        type="password"
-        autoComplete="current-password"
-        errors={errors?.password}
-      />
+      <div className="space-y-1.5">
+        <Field
+          name="password"
+          label="Password"
+          type="password"
+          autoComplete="current-password"
+          errors={errors?.password}
+        />
+        <div className="text-right">
+          <Link href="/forgot-password" className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
+            Forgot password?
+          </Link>
+        </div>
+      </div>
       {state?.message && (
         <p role="alert" className="text-sm text-destructive">
           {state.message}

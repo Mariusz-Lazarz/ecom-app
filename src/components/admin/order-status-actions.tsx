@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { useActionState, useState } from "react"
-import { CircleAlert, Sparkles } from "lucide-react"
+import { CircleAlert, Mail, Sparkles } from "lucide-react"
 
 import { changeOrderStatus, type OrderActionResult } from "@/app/actions/orders"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -52,8 +52,9 @@ type OrderStatusActionsProps = { number: string; status: OrderStatus }
  * The admin's status buttons: one per status `ORDER_TRANSITIONS` allows from the current one
  * (cancel and reject styled as destructive). Each opens a confirmation dialog with an optional
  * note (and a tracking number for `shipped`) that submits to `changeOrderStatus`: on success it
- * closes with a toast (the action refreshes the page); on failure the errors show in the dialog.
- * Final statuses get a "No further actions" note instead.
+ * closes with a toast (the action refreshes the page and emails the customer); on failure the
+ * errors show in the dialog. A hint next to the buttons says the customer will be emailed. Final
+ * statuses get a "No further actions" note instead.
  */
 export function OrderStatusActions({ number, status }: OrderStatusActionsProps) {
   const [target, setTarget] = useState<OrderStatus | null>(null)
@@ -73,16 +74,22 @@ export function OrderStatusActions({ number, status }: OrderStatusActionsProps) 
       {next.length === 0 ? (
         <p className="text-sm text-muted-foreground">No further actions: this order is final.</p>
       ) : (
-        <div className="flex flex-wrap gap-2">
-          {next.map((to) => (
-            <Button
-              key={to}
-              variant={DESTRUCTIVE.includes(to) ? "destructive" : to === next[0] ? "default" : "outline"}
-              onClick={() => start(to)}
-            >
-              {STATUS_ACTION_LABELS[to]}
-            </Button>
-          ))}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+          <div className="flex flex-wrap gap-2">
+            {next.map((to) => (
+              <Button
+                key={to}
+                variant={DESTRUCTIVE.includes(to) ? "destructive" : to === next[0] ? "default" : "outline"}
+                onClick={() => start(to)}
+              >
+                {STATUS_ACTION_LABELS[to]}
+              </Button>
+            ))}
+          </div>
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Mail className="size-3.5" aria-hidden />
+            Customer will be emailed
+          </p>
         </div>
       )}
       <Dialog open={open} onOpenChange={setOpen}>

@@ -64,6 +64,15 @@ describe("OrderStatusActions", () => {
     },
   )
 
+  it("says the customer will be emailed, only while there are changes to make", () => {
+    const { unmount } = render(<OrderStatusActions number="NC-10001" status="processing" />)
+    expect(screen.getByText("Customer will be emailed")).toBeInTheDocument()
+    unmount()
+
+    render(<OrderStatusActions number="NC-10001" status="delivered" />)
+    expect(screen.queryByText("Customer will be emailed")).not.toBeInTheDocument()
+  })
+
   it("styles cancel and reject as destructive", () => {
     render(<OrderStatusActions number="NC-10001" status="pending" />)
 
