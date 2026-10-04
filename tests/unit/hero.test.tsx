@@ -1,7 +1,10 @@
 import { render, screen, within } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
-import { Hero } from "@/components/home/hero"
+// HeroStats is an async Server Component (reads the database) and has its own tests.
+vi.mock("@/components/home/hero-stats", () => ({ HeroStats: () => <dl data-testid="hero-stats" /> }))
+
+const { Hero } = await import("@/components/home/hero")
 
 describe("Hero", () => {
   it("renders the single page-level heading", () => {
@@ -22,18 +25,14 @@ describe("Hero", () => {
     )
   })
 
-  it("pairs each trust stat label with its value", () => {
-    const { container } = render(<Hero />)
+  it("shows the store stats under the calls to action", () => {
+    render(<Hero />)
 
-    const pairs = Array.from(container.querySelectorAll("dl > div")).map((row) => [
-      row.querySelector("dt")?.textContent,
-      row.querySelector("dd")?.textContent,
-    ])
-    expect(pairs).toEqual([
-      ["Happy customers", "50k+"],
-      ["Average delivery", "2–4 days"],
-      ["Store rating", "4.8/5"],
-    ])
+    const stats = screen.getByTestId("hero-stats")
+    expect(
+      screen.getByRole("link", { name: "Browse categories" }).compareDocumentPosition(stats) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
   })
 
   it("shows the shopping animation with a descriptive label", () => {
